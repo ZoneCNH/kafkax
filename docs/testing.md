@@ -18,6 +18,24 @@
 - `internal/releasequality` 必须覆盖 `Compute`、`Verify` 和 `Marshal` 的正常与失败路径。
 - Release manifest 测试必须在临时 fixture 仓库构造所需 `.omc` state，不得依赖当前工作区的 Agent 运行态文件。
 
+## Kafka L2 gates
+
+Kafka adapter/factory 的 contract slice 必须先通过静态 contract 和文档 gate：
+
+- `GOWORK=off make contracts`
+- `GOWORK=off make docs-check`
+- `GOWORK=off make boundary`
+
+目标 Kafka gates 是：
+
+- `kafka-contract`
+- `kafka-integration`
+- `kafka-fault-injection`
+- `kafka-metrics-golden`
+- `kafka-admin-golden`
+
+除 `kafka-contract` 可以由 schema/docs/public API contract 证明外，其余 broker-dependent gates 必须有真实 driver、broker fixture 和命令输出才可标记 passed。broker integration unavailable 时必须标记 blocked，并在 Evidence 中写明缺失 driver/broker runtime；不得用文档存在或 mock-only 测试替代真实 broker gate。
+
 ## 示例与 testkit Smoke
 
 - `examples/basic` 必须输出当前 module name。

@@ -21,6 +21,19 @@
 
 生成的基础库不得依赖 `x.go`。
 
+## L2 Kafka adapter API contract
+
+当 `kafkax` 作为 L2 Kafka adapter/factory 标准推进时，公共 API 必须额外覆盖：
+
+- `Producer`：发送消息，公开交付语义、重试/幂等约束和 DLQ 结果。
+- `Consumer`：订阅和消费消息，公开 offset、commit、rebalance 和 handler 失败语义。
+- `Admin`：topic/metadata 管理，公开 unsupported operation、timeout、conflict 和 auth error。
+- `TopicSpec`：driver-neutral topic 声明。
+- `Message`、`Header`、`Offset`：匹配 `contracts/kafkax.message.schema.json` 的 driver-neutral 数据模型。
+- `Error`、`Health`、`Config`：继续使用稳定 typed error、health 和 config contract。
+
+公共 API 不得暴露 `kgo.*`、`kafka-go.*`、`confluent.*` 或其它第三方 Kafka driver 类型；driver 只能存在于内部实现或适配器边界。Kafka L2 profile 由 `contracts/l2-kafka-adapter.schema.json` 约束，配置和 metrics 分别由 `contracts/kafkax.config.schema.json`、`contracts/kafkax.metrics.schema.json` 和 `docs/metrics.md` 约束。
+
 ## 生成对齐
 
 使用 `scripts/render_template.sh` 生成具体基础库时，公共包目录会从 `pkg/kafkax` 移动到 `pkg/kafkax`，代码 imports、文档占位符和 module path 会同步替换。

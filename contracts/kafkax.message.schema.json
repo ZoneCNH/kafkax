@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ZoneCNH/kafkax/contracts/kafkax.message.schema.json",
+  "title": "kafkax message contract",
+  "description": "Driver-neutral Kafka message envelope; no business payload schema is implied.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["topic"],
+  "properties": {
+    "topic": { "type": "string", "minLength": 1 },
+    "key_b64": { "type": "string" },
+    "value_b64": { "type": "string" },
+    "headers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "value_b64"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "value_b64": { "type": "string" }
+        }
+      }
+    },
+    "partition": { "type": "integer", "minimum": -1 },
+    "offset": { "type": "integer", "minimum": -1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "attributes": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}
