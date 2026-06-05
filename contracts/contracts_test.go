@@ -112,6 +112,10 @@ func TestGoalRuntimeSchemasAreValidJSON(t *testing.T) {
 		"execution-evidence.schema.json",
 		"downstream-adoption-proof.schema.json",
 		"docker-toolchain.schema.json",
+		"l2-kafka-adapter.schema.json",
+		"kafkax.config.schema.json",
+		"kafkax.message.schema.json",
+		"kafkax.metrics.schema.json",
 	} {
 		t.Run(path, func(t *testing.T) {
 			content, err := os.ReadFile(path)

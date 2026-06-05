@@ -2242,7 +2242,11 @@ func TestEvidenceReplayRejectsChecksumAndHashMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read copied ledger: %v", err)
 	}
-	content = []byte(strings.Replace(string(content), `"previous_hash":"cd168fe5bec5dc0e90de912a62fb7d76d850e77eb106c9c32c73f39e894e390a"`, `"previous_hash":"0000000000000000000000000000000000000000000000000000000000000000"`, 1))
+	tamperedContent, tampered := tamperSecondEvidenceReplayPreviousHash(t, content)
+	if !tampered {
+		t.Fatalf("fixture ledger did not contain a second replay entry to tamper: %s", string(content))
+	}
+	content = tamperedContent
 	if err := os.WriteFile(ledger, content, 0o644); err != nil {
 		t.Fatalf("tamper ledger: %v", err)
 	}
@@ -2265,6 +2269,28 @@ func TestEvidenceReplayRejectsChecksumAndHashMismatch(t *testing.T) {
 	if !gapsContainSubstring(report.Gaps, "hash chain mismatch") {
 		t.Fatalf("gaps = %#v; want hash chain mismatch", report.Gaps)
 	}
+}
+
+func tamperSecondEvidenceReplayPreviousHash(t *testing.T, content []byte) ([]byte, bool) {
+	t.Helper()
+	var output []string
+	tampered := false
+	for _, line := range strings.Split(strings.TrimSpace(string(content)), "\n") {
+		var entry evidenceReplayEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("parse copied fixture ledger line: %v", err)
+		}
+		if entry.Seq == 2 {
+			entry.PreviousHash = strings.Repeat("0", 64)
+			tampered = true
+		}
+		data, err := json.Marshal(entry)
+		if err != nil {
+			t.Fatalf("marshal tampered fixture ledger line: %v", err)
+		}
+		output = append(output, string(data))
+	}
+	return []byte(strings.Join(output, "\n") + "\n"), tampered
 }
 
 func TestEvidenceReplayMissingOrStaleEvidenceBlocks(t *testing.T) {
