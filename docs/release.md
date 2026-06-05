@@ -127,6 +127,8 @@ Kafka L2 adapter factory 的 release Evidence 必须保持 contract-first 语义
 - `artifacts`
 - `notes`
 
+`notes.known_risks` 必须保留当前显式缺口，不得因 schema、registry、dry-run 或本地生成成功而删除：真实 Kafka/Redpanda broker Evidence 缺口、`latest.json` / checksum 作为每次发布需重新生成 artifact 的缺口、下游 proof-based adoption 缺口，以及生产 Kafka driver / driver version / broker version matrix / runtime compatibility Evidence 缺口。
+
 其中 `standard_impact.downstream_release_decision` 只能使用 `required` 或 `not_required`；`standard_impact.repository_rules_release_decision` 只能使用 `audit_required` 或 `not_required`。release manifest 校验必须拒绝其它非空值，空值仍按 required field 处理。
 
 `make release-check` 成功后会以 `CHECK_STATUS=passed` 生成 manifest，并立即运行 `make release-evidence-check`。若单独运行 `make evidence`，未显式传入的检查状态默认为 `unknown`，后续校验会拒绝把这些状态当作已通过的 release gate。因为 `latest.json` 不再提交，manifest 中的 `commit` 可以指向实际执行 release gate 的 HEAD，避免自引用提交哈希导致的永久漂移。
