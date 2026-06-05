@@ -1,0 +1,3 @@
+schema_version: "1.0"
+canonical_module: "github.com/ZoneCNH/kafkax"
+legacy_names: ["kafkax", "foundationx"]
