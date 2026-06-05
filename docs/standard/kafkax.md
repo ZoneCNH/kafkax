@@ -17,7 +17,7 @@
 
 - 通用 config/error/health/metrics contract：`contracts/config.schema.json`、`contracts/error.schema.json`、`contracts/health.schema.json`、`contracts/metrics.md`。
 - Kafka L2 contract：`contracts/l2-kafka-adapter.schema.json`。
-- Kafka config/message/metrics contract：`contracts/kafkax.config.schema.json`、`contracts/kafkax.message.schema.json`、`contracts/kafkax.metrics.schema.json`。
+- Kafka config/message/topic/metrics contract：`contracts/kafkax.config.schema.json`、`contracts/kafkax.message.schema.json`、`contracts/kafkax.topic.schema.json`、`contracts/kafkax.metrics.schema.json`。
 - 文档入口：`docs/api.md`、`docs/config.md`、`docs/errors.md`、`docs/metrics.md`、`docs/testing.md`、`docs/release.md`。
 
 ## Harness and Evidence

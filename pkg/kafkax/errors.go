@@ -16,6 +16,11 @@ const (
 	ErrorKindAuth        ErrorKind = "auth"
 	ErrorKindConflict    ErrorKind = "conflict"
 	ErrorKindRateLimit   ErrorKind = "rate_limit"
+	ErrorKindProduce     ErrorKind = "produce"
+	ErrorKindConsume     ErrorKind = "consume"
+	ErrorKindCommit      ErrorKind = "commit"
+	ErrorKindAdmin       ErrorKind = "admin"
+	ErrorKindDriver      ErrorKind = "driver"
 	ErrorKindInternal    ErrorKind = "internal"
 )
 

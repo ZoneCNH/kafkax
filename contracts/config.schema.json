@@ -13,6 +13,30 @@
     },
     "secret": {
       "type": "string"
+    },
+    "brokers": {
+      "type": "array"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "security": {
+      "type": "object"
+    },
+    "producer": {
+      "type": "object"
+    },
+    "consumer": {
+      "type": "object"
+    },
+    "admin": {
+      "type": "object"
+    },
+    "retry": {
+      "type": "object"
+    },
+    "observability": {
+      "type": "object"
     }
   },
   "additionalProperties": true

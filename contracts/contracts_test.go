@@ -35,6 +35,11 @@ func TestErrorKindContractMatchesPublicConstants(t *testing.T) {
 		string(kafkax.ErrorKindAuth),
 		string(kafkax.ErrorKindConflict),
 		string(kafkax.ErrorKindRateLimit),
+		string(kafkax.ErrorKindProduce),
+		string(kafkax.ErrorKindConsume),
+		string(kafkax.ErrorKindCommit),
+		string(kafkax.ErrorKindAdmin),
+		string(kafkax.ErrorKindDriver),
 		string(kafkax.ErrorKindInternal),
 	)
 	actual := sortedStrings(schema.Properties["kind"].Enum...)
@@ -67,6 +72,14 @@ func TestConfigContractMatchesPublicConfig(t *testing.T) {
 	requireSchemaFieldMapsToStructField(t, schema, configType, "name", "Name", "string")
 	requireSchemaFieldMapsToStructField(t, schema, configType, "timeout_ms", "Timeout", "integer")
 	requireSchemaFieldMapsToStructField(t, schema, configType, "secret", "Secret", "string")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "brokers", "Brokers", "array")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "client_id", "ClientID", "string")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "security", "Security", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "producer", "Producer", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "consumer", "Consumer", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "admin", "Admin", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "retry", "Retry", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "observability", "Observability", "object")
 
 	if timeoutField, ok := configType.FieldByName("Timeout"); !ok || timeoutField.Type != reflect.TypeOf(time.Duration(0)) {
 		t.Fatalf("Config.Timeout must remain time.Duration, got %v", timeoutField.Type)
@@ -92,11 +105,45 @@ func TestMetricsContractDocumentsPublicConstants(t *testing.T) {
 		kafkax.MetricClientRequestDurationSeconds,
 		kafkax.MetricClientRetriesTotal,
 		kafkax.MetricClientInflight,
+		kafkax.MetricProducerMessagesTotal,
+		kafkax.MetricProducerErrorsTotal,
+		kafkax.MetricProducerLatencySeconds,
+		kafkax.MetricConsumerMessagesTotal,
+		kafkax.MetricConsumerErrorsTotal,
+		kafkax.MetricConsumerLag,
+		kafkax.MetricConsumerCommitsTotal,
+		kafkax.MetricAdminOperationsTotal,
+		kafkax.MetricAdminErrorsTotal,
 	} {
 		if !strings.Contains(text, "`"+metric+"`") {
 			t.Fatalf("metrics contract does not document %q", metric)
 		}
 	}
+}
+
+func TestKafkaMessageContractMatchesPublicMessage(t *testing.T) {
+	schema := readSchema(t, "kafkax.message.schema.json")
+	requireFields(t, schema.Required, "topic")
+
+	messageType := reflect.TypeOf(kafkax.Message{})
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "topic", "Topic", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "key_b64", "Key", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "value_b64", "Value", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "headers", "Headers", "array")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "timestamp", "Timestamp", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "partition", "Partition", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "offset", "Offset", "integer")
+}
+
+func TestKafkaTopicContractMatchesPublicTopicSpec(t *testing.T) {
+	schema := readSchema(t, "kafkax.topic.schema.json")
+	requireFields(t, schema.Required, "name", "partitions", "replication_factor")
+
+	topicType := reflect.TypeOf(kafkax.TopicSpec{})
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "name", "Name", "string")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "partitions", "Partitions", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "replication_factor", "ReplicationFactor", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "config", "Config", "object")
 }
 
 func TestGoalRuntimeSchemasAreValidJSON(t *testing.T) {
@@ -115,6 +162,7 @@ func TestGoalRuntimeSchemasAreValidJSON(t *testing.T) {
 		"l2-kafka-adapter.schema.json",
 		"kafkax.config.schema.json",
 		"kafkax.message.schema.json",
+		"kafkax.topic.schema.json",
 		"kafkax.metrics.schema.json",
 	} {
 		t.Run(path, func(t *testing.T) {

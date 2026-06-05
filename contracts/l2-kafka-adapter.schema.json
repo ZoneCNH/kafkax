@@ -40,13 +40,14 @@
     },
     "contracts": {
       "type": "array",
-      "minItems": 4,
+      "minItems": 5,
       "uniqueItems": true,
       "items": {
         "type": "string",
         "enum": [
           "contracts/kafkax.config.schema.json",
           "contracts/kafkax.message.schema.json",
+          "contracts/kafkax.topic.schema.json",
           "contracts/kafkax.metrics.schema.json",
           "contracts/error.schema.json",
           "contracts/health.schema.json"

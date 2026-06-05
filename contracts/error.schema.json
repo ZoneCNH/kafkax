@@ -14,6 +14,11 @@
         "auth",
         "conflict",
         "rate_limit",
+        "produce",
+        "consume",
+        "commit",
+        "admin",
+        "driver",
         "internal"
       ]
     },
