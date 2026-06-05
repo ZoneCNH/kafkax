@@ -108,6 +108,13 @@ var requiredArtifacts = []string{
 	"release/evidence/docker-toolchain-summary.json",
 }
 
+var defaultKnownRisks = []string{
+	"broker_integration_gap: real Kafka/Redpanda broker evidence is absent; broker-dependent gates must stay blocked or unknown until current command output is attached.",
+	"release_manifest_gap: release/manifest/latest.json and checksum are generated artifacts; each release must attach fresh manifest evidence before claiming release-ready.",
+	"downstream_adoption_gap: registry, matrix, dry-run, or local generation status is not downstream adoption; only current downstream repository gate output can support adopted.",
+	"production_driver_gap: no production Kafka driver, driver version, broker version matrix, or runtime compatibility evidence is recorded yet.",
+}
+
 const standardImpactReportPath = "release/standard-impact/latest.md"
 const debtReportPath = "release/debt/latest.json"
 const debtMarkdownPath = "release/debt/latest.md"

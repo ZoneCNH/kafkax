@@ -208,6 +208,11 @@ func TestRunCLIGeneratesManifestToOut(t *testing.T) {
 	if !hasGeneratorTarget(manifest.GeneratorEvidence.Targets, "redisx", "github.com/ZoneCNH/redisx", "redisx") {
 		t.Fatalf("generator targets = %+v, want redisx target", manifest.GeneratorEvidence.Targets)
 	}
+	for _, risk := range defaultKnownRisks {
+		if !contains(manifest.Notes.KnownRisks, risk) {
+			t.Fatalf("notes.known_risks = %v, want %q", manifest.Notes.KnownRisks, risk)
+		}
+	}
 	for _, name := range checkNames {
 		if manifest.Checks[name] != "passed" {
 			t.Fatalf("checks[%q] = %q, want passed", name, manifest.Checks[name])

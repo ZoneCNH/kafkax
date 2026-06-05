@@ -338,7 +338,7 @@ func buildManifest() (Manifest, error) {
 		Artifacts: append([]string(nil), requiredArtifacts...),
 		Notes: Notes{
 			BreakingChanges: "none",
-			KnownRisks:      []string{},
+			KnownRisks:      append([]string(nil), defaultKnownRisks...),
 		},
 	}, nil
 }
