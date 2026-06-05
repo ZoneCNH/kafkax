@@ -16,6 +16,8 @@
 - [安全与密钥](security-and-secret-policy.md)：禁止泄露生产密钥和 `/home/k8s/secrets/env/*` 内容。
 - [模板生成契约](template-generation-contract.md)：module path、package name、README/docs 替换规则。
 - [下游兼容性](downstream-compatibility.md)：生成库兼容窗口和变更级别。
+- [Kafka L2 Adapter](l2-kafka-adapter.md)：Kafka L2 factory 的 driver-neutral 公共 API、contract-first gate、blocked broker evidence 和 adoption 边界。
+- [Metrics 契约](../metrics.md)：Kafka producer、consumer、admin、connection、rebalance、lag 和 DLQ metrics 命名与脱敏规则。
 
 ## 当前 v3.1 补充入口
 
