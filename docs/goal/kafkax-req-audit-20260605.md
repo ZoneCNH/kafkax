@@ -52,6 +52,13 @@ rg -n "type (Producer|Consumer|Admin|TopicSpec|Header|Offset)\\b|type Message\\b
 
 Subagent `019e952f-0596-77f3-9ffb-81f876b40196` / `Ptolemy` 做了只读复核并确认：当前不能把矩阵登记当作采纳；`pkg/kafkax` 不是 Kafka adapter；generic gate 不能替代 Kafka-specific gate；单个 `Secret` redaction 不能证明完整安全配置；新增 resilience/scheduling dependency 需要先做 Standard Impact。
 
+## 本审计文件验证快照
+
+- `git diff --check`：通过。
+- `GOWORK=off go test ./pkg/kafkax ./contracts`：通过。
+- `GOWORK=off go test ./...`：未通过，失败点在既有 `cmd/goalcli` evidence replay fixture，缺少 `testkit/governance/fixtures/evidence-replay/passed/artifacts/{release-ready.out,runtime-health.out,attest-conformance.out}`。
+- `GOWORK=off make docs-check`：未通过，既有阻断为 `docs/standard/kafkax.md` 缺失。
+
 ## 下一安全切片
 
 1. 在 `pkg/kafkax` 内先补 contract-first public API skeleton（Producer、Consumer、Admin、Message、Header、Offset、TopicSpec、config/options/error 分类），不引入第三方 Kafka concrete types。
