@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ZoneCNH/kafkax/contracts/l2-kafka-adapter.schema.json",
+  "title": "L2 Kafka adapter contract",
+  "description": "Driver-neutral contract surface for a governed L2 Kafka infrastructure adapter/factory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "module",
+    "layer",
+    "public_api",
+    "contracts",
+    "gates",
+    "adoption_claim"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "module": { "type": "string", "const": "github.com/ZoneCNH/kafkax" },
+    "layer": { "type": "string", "const": "L2" },
+    "public_api": {
+      "type": "array",
+      "minItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "Producer",
+          "Consumer",
+          "Admin",
+          "TopicSpec",
+          "Message",
+          "Header",
+          "Offset",
+          "Error",
+          "Health",
+          "Config"
+        ]
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "minItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "contracts/kafkax.config.schema.json",
+          "contracts/kafkax.message.schema.json",
+          "contracts/kafkax.topic.schema.json",
+          "contracts/kafkax.metrics.schema.json",
+          "contracts/error.schema.json",
+          "contracts/health.schema.json"
+        ]
+      }
+    },
+    "gates": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "kafka-contract",
+              "kafka-integration",
+              "kafka-fault-injection",
+              "kafka-metrics-golden",
+              "kafka-admin-golden"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["required", "blocked", "passed", "failed"]
+          },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "adoption_claim": {
+      "type": "string",
+      "enum": ["not_claimed", "blocked", "claimed"]
+    }
+  }
+}

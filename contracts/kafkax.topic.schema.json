@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ZoneCNH/kafkax/contracts/kafkax.topic.schema.json",
+  "title": "kafkax topic contract",
+  "description": "Driver-neutral topic specification and description shape for Kafka admin APIs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "partitions", "replication_factor"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "partitions": { "type": "integer", "minimum": 1 },
+    "replication_factor": { "type": "integer", "minimum": 1 },
+    "retention_ms": { "type": "integer", "minimum": 0 },
+    "cleanup_policy": {
+      "type": "string",
+      "enum": ["delete", "compact", "compact,delete"]
+    },
+    "compression": {
+      "type": "string",
+      "enum": ["producer", "none", "gzip", "snappy", "lz4", "zstd"]
+    },
+    "min_in_sync_replicas": { "type": "integer", "minimum": 0 },
+    "config": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

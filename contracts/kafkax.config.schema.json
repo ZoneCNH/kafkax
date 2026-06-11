@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ZoneCNH/kafkax/contracts/kafkax.config.schema.json",
+  "title": "kafkax Kafka configuration contract",
+  "description": "Serializable, redaction-safe configuration shape for the driver-neutral L2 Kafka adapter.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["brokers", "client_id"],
+  "properties": {
+    "brokers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "client_id": { "type": "string", "minLength": 1 },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["none", "tls", "sasl_tls", "sasl_plaintext"] },
+        "sasl_mechanism": { "type": "string" },
+        "username_ref": { "type": "string" },
+        "password_ref": { "type": "string" },
+        "tls_ca_ref": { "type": "string" },
+        "tls_cert_ref": { "type": "string" },
+        "tls_key_ref": { "type": "string" }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "acks": { "type": "string", "enum": ["none", "leader", "all"] },
+        "idempotent": { "type": "boolean" },
+        "delivery_timeout_ms": { "type": "integer", "minimum": 0 },
+        "batch_bytes": { "type": "integer", "minimum": 0 },
+        "compression": { "type": "string", "enum": ["none", "gzip", "snappy", "lz4", "zstd"] }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "group_id": { "type": "string" },
+        "auto_offset_reset": { "type": "string", "enum": ["earliest", "latest", "none"] },
+        "max_poll_records": { "type": "integer", "minimum": 1 },
+        "session_timeout_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "admin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request_timeout_ms": { "type": "integer", "minimum": 0 },
+        "allow_topic_creation": { "type": "boolean" }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": { "type": "integer", "minimum": 0 },
+        "backoff_ms": { "type": "integer", "minimum": 0 },
+        "max_backoff_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metrics_namespace": { "type": "string" },
+        "log_message_value": { "type": "boolean", "const": false },
+        "trace_headers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

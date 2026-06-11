@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ZoneCNH/kafkax/contracts/kafkax.metrics.schema.json",
+  "title": "kafkax metrics contract",
+  "description": "Golden metric catalog shape for Kafka producer, consumer, admin, connection, rebalance, lag, and DLQ telemetry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "metrics"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "metrics": {
+      "type": "array",
+      "minItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "component", "description"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "type": { "type": "string", "enum": ["counter", "gauge", "histogram"] },
+          "component": {
+            "type": "string",
+            "enum": ["producer", "consumer", "admin", "connection", "rebalance", "lag", "dlq"]
+          },
+          "description": { "type": "string", "minLength": 1 },
+          "labels": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}

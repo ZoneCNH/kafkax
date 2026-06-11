@@ -1,0 +1,305 @@
+package contracts
+
+import (
+	"encoding/json"
+	"os"
+	"reflect"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ZoneCNH/kafkax/pkg/kafkax"
+)
+
+type schemaProperty struct {
+	Type    string   `json:"type"`
+	Enum    []string `json:"enum"`
+	Minimum *int     `json:"minimum"`
+}
+
+type objectSchema struct {
+	Required   []string                  `json:"required"`
+	Properties map[string]schemaProperty `json:"properties"`
+}
+
+func TestErrorKindContractMatchesPublicConstants(t *testing.T) {
+	schema := readSchema(t, "error.schema.json")
+
+	expected := sortedStrings(
+		string(kafkax.ErrorKindConfig),
+		string(kafkax.ErrorKindValidation),
+		string(kafkax.ErrorKindConnection),
+		string(kafkax.ErrorKindUnavailable),
+		string(kafkax.ErrorKindTimeout),
+		string(kafkax.ErrorKindAuth),
+		string(kafkax.ErrorKindConflict),
+		string(kafkax.ErrorKindRateLimit),
+		string(kafkax.ErrorKindProduce),
+		string(kafkax.ErrorKindConsume),
+		string(kafkax.ErrorKindCommit),
+		string(kafkax.ErrorKindAdmin),
+		string(kafkax.ErrorKindDriver),
+		string(kafkax.ErrorKindInternal),
+	)
+	actual := sortedStrings(schema.Properties["kind"].Enum...)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("error kind contract drift:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+	requireFields(t, schema.Required, "kind", "op", "message", "retryable")
+}
+
+func TestHealthStatusContractMatchesPublicConstants(t *testing.T) {
+	schema := readSchema(t, "health.schema.json")
+
+	expected := sortedStrings(
+		string(kafkax.HealthHealthy),
+		string(kafkax.HealthDegraded),
+		string(kafkax.HealthUnhealthy),
+	)
+	actual := sortedStrings(schema.Properties["status"].Enum...)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("health status contract drift:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+	requireFields(t, schema.Required, "name", "status", "checked_at")
+}
+
+func TestConfigContractMatchesPublicConfig(t *testing.T) {
+	schema := readSchema(t, "config.schema.json")
+	requireFields(t, schema.Required, "name")
+
+	configType := reflect.TypeOf(kafkax.Config{})
+	requireSchemaFieldMapsToStructField(t, schema, configType, "name", "Name", "string")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "timeout_ms", "Timeout", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "secret", "Secret", "string")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "brokers", "Brokers", "array")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "client_id", "ClientID", "string")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "security", "Security", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "producer", "Producer", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "consumer", "Consumer", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "admin", "Admin", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "retry", "Retry", "object")
+	requireSchemaFieldMapsToStructField(t, schema, configType, "observability", "Observability", "object")
+
+	if timeoutField, ok := configType.FieldByName("Timeout"); !ok || timeoutField.Type != reflect.TypeOf(time.Duration(0)) {
+		t.Fatalf("Config.Timeout must remain time.Duration, got %v", timeoutField.Type)
+	}
+	if minimum := schema.Properties["timeout_ms"].Minimum; minimum == nil || *minimum != 0 {
+		t.Fatalf("timeout_ms must define minimum 0, got %#v", minimum)
+	}
+}
+
+func TestMetricsContractDocumentsPublicConstants(t *testing.T) {
+	content, err := os.ReadFile("metrics.md")
+	if err != nil {
+		t.Fatalf("read metrics contract: %v", err)
+	}
+	text := string(content)
+	for _, metric := range []string{
+		kafkax.MetricClientCreatedTotal,
+		kafkax.MetricClientClosedTotal,
+		kafkax.MetricClientErrorsTotal,
+		kafkax.MetricClientHealthStatus,
+		kafkax.MetricClientHealthLatencyMS,
+		kafkax.MetricClientRequestsTotal,
+		kafkax.MetricClientRequestDurationSeconds,
+		kafkax.MetricClientRetriesTotal,
+		kafkax.MetricClientInflight,
+		kafkax.MetricProducerMessagesTotal,
+		kafkax.MetricProducerErrorsTotal,
+		kafkax.MetricProducerLatencySeconds,
+		kafkax.MetricConsumerMessagesTotal,
+		kafkax.MetricConsumerErrorsTotal,
+		kafkax.MetricConsumerLag,
+		kafkax.MetricConsumerCommitsTotal,
+		kafkax.MetricAdminOperationsTotal,
+		kafkax.MetricAdminErrorsTotal,
+	} {
+		if !strings.Contains(text, "`"+metric+"`") {
+			t.Fatalf("metrics contract does not document %q", metric)
+		}
+	}
+}
+
+func TestKafkaMessageContractMatchesPublicMessage(t *testing.T) {
+	schema := readSchema(t, "kafkax.message.schema.json")
+	requireFields(t, schema.Required, "topic")
+
+	messageType := reflect.TypeOf(kafkax.Message{})
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "topic", "Topic", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "key_b64", "Key", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "value_b64", "Value", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "headers", "Headers", "array")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "timestamp", "Timestamp", "string")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "partition", "Partition", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, messageType, "offset", "Offset", "integer")
+}
+
+func TestKafkaTopicContractMatchesPublicTopicSpec(t *testing.T) {
+	schema := readSchema(t, "kafkax.topic.schema.json")
+	requireFields(t, schema.Required, "name", "partitions", "replication_factor")
+
+	topicType := reflect.TypeOf(kafkax.TopicSpec{})
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "name", "Name", "string")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "partitions", "Partitions", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "replication_factor", "ReplicationFactor", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "retention_ms", "Retention", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "cleanup_policy", "CleanupPolicy", "string")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "compression", "Compression", "string")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "min_in_sync_replicas", "MinInSyncReplicas", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "config", "Config", "object")
+}
+
+func TestGoalRuntimeSchemasAreValidJSON(t *testing.T) {
+	for _, path := range []string{
+		"goalcli-report.schema.json",
+		"goalcli-dashboard.schema.json",
+		"issue-registry.schema.json",
+		"command-registry.schema.json",
+		"layer-governance.schema.json",
+		"execution-context.schema.json",
+		"conformance-attestation.schema.json",
+		"policy.schema.json",
+		"execution-evidence.schema.json",
+		"downstream-adoption-proof.schema.json",
+		"docker-toolchain.schema.json",
+		"l2-kafka-adapter.schema.json",
+		"kafkax.config.schema.json",
+		"kafkax.message.schema.json",
+		"kafkax.topic.schema.json",
+		"kafkax.metrics.schema.json",
+	} {
+		t.Run(path, func(t *testing.T) {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			var schema map[string]any
+			if err := json.Unmarshal(content, &schema); err != nil {
+				t.Fatalf("parse %s: %v", path, err)
+			}
+			if schema["$schema"] == "" || schema["type"] != "object" {
+				t.Fatalf("%s must declare object JSON schema, got %#v", path, schema)
+			}
+		})
+	}
+}
+
+func TestExecutionContextContractMatchesGovernanceContexts(t *testing.T) {
+	schema := readSchema(t, "execution-context.schema.json")
+
+	expected := sortedStrings("local_write", "local_readonly", "ci_pull_request", "ci_main_verify", "release_verify")
+	actual := sortedStrings(schema.Properties["context"].Enum...)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("execution context enum drift:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+	requireFields(t, schema.Required, "context", "root", "gowork")
+}
+
+func TestExecutionEvidenceContractRequiredFields(t *testing.T) {
+	schema := readSchema(t, "execution-evidence.schema.json")
+	requireFields(t, schema.Required,
+		"evidence_id",
+		"command",
+		"cwd",
+		"branch",
+		"commit",
+		"exit_code",
+		"timestamp",
+		"stdout_sha256",
+		"artifact_path",
+	)
+	confidence := sortedStrings(schema.Properties["confidence"].Enum...)
+	expectedConfidence := sortedStrings("high", "medium", "low")
+	if !reflect.DeepEqual(confidence, expectedConfidence) {
+		t.Fatalf("confidence enum drift:\nactual:   %#v\nexpected: %#v", confidence, expectedConfidence)
+	}
+	if got := schema.Properties["exit_code"].Type; got != "integer" {
+		t.Fatalf("exit_code type = %q, want integer", got)
+	}
+}
+
+func TestDownstreamAdoptionProofContractRequiredFields(t *testing.T) {
+	schema := readSchema(t, "downstream-adoption-proof.schema.json")
+	requireFields(t, schema.Required,
+		"schema_version",
+		"source_repo",
+		"source_commit",
+		"downstream_repo",
+		"downstream_commit",
+		"mode",
+		"gate_outputs",
+		"rollback",
+	)
+	mode := sortedStrings(schema.Properties["mode"].Enum...)
+	expectedMode := sortedStrings("patch-only", "dry-run", "pr-plan")
+	if !reflect.DeepEqual(mode, expectedMode) {
+		t.Fatalf("mode enum drift:\nactual:   %#v\nexpected: %#v", mode, expectedMode)
+	}
+}
+
+func TestExecutionEvidenceContractMatchesEvidenceManifest(t *testing.T) {
+	manifest, err := os.ReadFile("../.agent/evidence/evidence-artifacts.yaml")
+	if err != nil {
+		t.Fatalf("read evidence-artifacts.yaml: %v", err)
+	}
+	text := string(manifest)
+	for _, needle := range []string{
+		"contracts/execution-evidence.schema.json",
+		"execution_evidence",
+		"evidence_id",
+		"stdout_sha256",
+		"exit_code",
+	} {
+		if !strings.Contains(text, needle) {
+			t.Fatalf(".agent/evidence/evidence-artifacts.yaml missing required marker %q", needle)
+		}
+	}
+}
+
+func requireSchemaFieldMapsToStructField(t *testing.T, schema objectSchema, structType reflect.Type, schemaField string, structField string, schemaType string) {
+	t.Helper()
+
+	property, ok := schema.Properties[schemaField]
+	if !ok {
+		t.Fatalf("schema missing property %q", schemaField)
+	}
+	if property.Type != schemaType {
+		t.Fatalf("schema property %q type = %q, want %q", schemaField, property.Type, schemaType)
+	}
+	if _, ok := structType.FieldByName(structField); !ok {
+		t.Fatalf("%s missing field %s required by schema property %q", structType.Name(), structField, schemaField)
+	}
+}
+
+func readSchema(t *testing.T, path string) objectSchema {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var schema objectSchema
+	if err := json.Unmarshal(content, &schema); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return schema
+}
+
+func requireFields(t *testing.T, actual []string, expected ...string) {
+	t.Helper()
+	fields := make(map[string]bool, len(actual))
+	for _, field := range actual {
+		fields[field] = true
+	}
+	for _, field := range expected {
+		if !fields[field] {
+			t.Fatalf("required fields missing %q from %#v", field, actual)
+		}
+	}
+}
+
+func sortedStrings(values ...string) []string {
+	copied := append([]string(nil), values...)
+	sort.Strings(copied)
+	return copied
+}
