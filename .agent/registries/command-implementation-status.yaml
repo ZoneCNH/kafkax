@@ -60,6 +60,7 @@ groups:
       - evidence
       - manifest
       - integration
+      - kafka-contract
       - release-evidence-check
       - release-evidence-checksum-check
       - release-evidence-hash
@@ -72,6 +73,19 @@ groups:
       - dashboard-generate
       - rules-consistency-check
       - rules-verify
+
+  - id: p0_kafka_l2_gap_reports
+    phase: P0
+    implementation_status: implemented
+    execution_status: not_run
+    release_usable: false
+    evidence_strength: gap_report_only
+    note: "Kafka L2 broker-dependent gates 当前只输出 gap report；生产 driver、broker fixture 和 golden Evidence 完成前不得作为 release usable。"
+    commands:
+      - kafka-integration
+      - kafka-fault-injection
+      - kafka-metrics-golden
+      - kafka-admin-golden
 
   - id: ctx_context_profiles
     phase: CTX

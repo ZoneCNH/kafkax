@@ -59,6 +59,26 @@ lint:
 integration:
 	$(GOALCLI) integration
 
+.PHONY: kafka-contract
+kafka-contract:
+	$(GOALCLI) kafka-contract
+
+.PHONY: kafka-integration
+kafka-integration:
+	$(GOALCLI) kafka-integration
+
+.PHONY: kafka-fault-injection
+kafka-fault-injection:
+	$(GOALCLI) kafka-fault-injection
+
+.PHONY: kafka-metrics-golden
+kafka-metrics-golden:
+	$(GOALCLI) kafka-metrics-golden
+
+.PHONY: kafka-admin-golden
+kafka-admin-golden:
+	$(GOALCLI) kafka-admin-golden
+
 .PHONY: docker-toolchain-check
 docker-toolchain-check:
 	./scripts/docker/check_toolchain.sh

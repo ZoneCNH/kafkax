@@ -1,6 +1,9 @@
 package kafkax
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Admin interface {
 	DescribeTopics(context.Context, ...string) ([]TopicDescription, error)
@@ -13,6 +16,10 @@ type TopicSpec struct {
 	Name              string
 	Partitions        int
 	ReplicationFactor int
+	Retention         time.Duration
+	CleanupPolicy     CleanupPolicy
+	Compression       CompressionCodec
+	MinInSyncReplicas int
 	Config            map[string]string
 }
 
@@ -26,6 +33,10 @@ type TopicDescription struct {
 	Name              string
 	Partitions        int
 	ReplicationFactor int
+	Retention         time.Duration
+	CleanupPolicy     CleanupPolicy
+	Compression       CompressionCodec
+	MinInSyncReplicas int
 	Config            map[string]string
 }
 
@@ -36,6 +47,25 @@ func (d TopicDescription) Clone() TopicDescription {
 }
 
 type TopicPlanAction string
+
+type CleanupPolicy string
+
+const (
+	CleanupPolicyDelete        CleanupPolicy = "delete"
+	CleanupPolicyCompact       CleanupPolicy = "compact"
+	CleanupPolicyCompactDelete CleanupPolicy = "compact,delete"
+)
+
+type CompressionCodec string
+
+const (
+	CompressionProducer CompressionCodec = "producer"
+	CompressionNone     CompressionCodec = "none"
+	CompressionGzip     CompressionCodec = "gzip"
+	CompressionSnappy   CompressionCodec = "snappy"
+	CompressionLZ4      CompressionCodec = "lz4"
+	CompressionZSTD     CompressionCodec = "zstd"
+)
 
 const (
 	TopicPlanNoop   TopicPlanAction = "noop"

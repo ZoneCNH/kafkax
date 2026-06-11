@@ -55,6 +55,114 @@ func TestTopicContractsCloneConfigMaps(t *testing.T) {
 	}
 }
 
+func TestBatchProduceResultCloneCopiesResults(t *testing.T) {
+	result := BatchProduceResult{
+		Results: []ProduceResult{{Topic: "orders", Partition: 1, Offset: 42}},
+	}
+
+	cloned := result.Clone()
+	result.Results[0].Topic = "payments"
+	result.Results[0].Offset = 99
+
+	if cloned.Results[0].Topic != "orders" {
+		t.Fatalf("expected cloned result topic to be isolated, got %q", cloned.Results[0].Topic)
+	}
+	if cloned.Results[0].Offset != 42 {
+		t.Fatalf("expected cloned result offset to be isolated, got %d", cloned.Results[0].Offset)
+	}
+}
+
+func TestSubscriptionCloneCopiesTopics(t *testing.T) {
+	subscription := Subscription{Topics: []string{"orders"}, GroupID: "workers", StartOffset: OffsetResetEarliest}
+
+	cloned := subscription.Clone()
+	subscription.Topics[0] = "payments"
+
+	if cloned.Topics[0] != "orders" {
+		t.Fatalf("expected cloned subscription topics to be isolated, got %#v", cloned.Topics)
+	}
+	if cloned.GroupID != "workers" || cloned.StartOffset != OffsetResetEarliest {
+		t.Fatalf("expected cloned subscription metadata to be preserved, got %#v", cloned)
+	}
+}
+
+func TestRecordContractsCloneMutableMessageFields(t *testing.T) {
+	record := Record{
+		Message: Message{
+			Topic: "orders",
+			Key:   []byte("key"),
+			Value: []byte("value"),
+			Headers: []Header{
+				{Key: "trace", Value: []byte("abc")},
+			},
+		},
+		GroupID: "workers",
+	}
+	batch := RecordBatch{Records: []Record{record}}
+
+	clonedRecord := record.Clone()
+	clonedBatch := batch.Clone()
+	record.Key[0] = 'K'
+	record.Value[0] = 'V'
+	record.Headers[0].Value[0] = 'x'
+	batch.Records[0].Key[0] = 'B'
+	batch.Records[0].Headers[0].Value[0] = 'y'
+
+	if string(clonedRecord.Key) != "key" || string(clonedRecord.Value) != "value" || string(clonedRecord.Headers[0].Value) != "abc" {
+		t.Fatalf("expected cloned record message fields to be isolated, got %#v", clonedRecord)
+	}
+	if clonedRecord.GroupID != "workers" {
+		t.Fatalf("expected cloned record group to be preserved, got %q", clonedRecord.GroupID)
+	}
+	if string(clonedBatch.Records[0].Key) != "key" || string(clonedBatch.Records[0].Headers[0].Value) != "abc" {
+		t.Fatalf("expected cloned record batch fields to be isolated, got %#v", clonedBatch)
+	}
+}
+
+func TestTopicPlanCloneCopiesPluralSpecs(t *testing.T) {
+	plan := TopicPlan{
+		Action: TopicPlanCreate,
+		Spec:   TopicSpec{Name: "legacy", Config: map[string]string{"cleanup.policy": "delete"}},
+		Specs: []TopicSpec{
+			{Name: "orders", Config: map[string]string{"retention.ms": "60000"}},
+			{Name: "payments", Config: map[string]string{"segment.bytes": "1024"}},
+		},
+		Changes: []TopicChange{{Field: "partitions", From: "1", To: "3"}},
+	}
+
+	cloned := plan.Clone()
+	plan.Spec.Config["cleanup.policy"] = "compact"
+	plan.Specs[0].Config["retention.ms"] = "1"
+	plan.Changes[0].To = "6"
+
+	if cloned.Spec.Config["cleanup.policy"] != "delete" {
+		t.Fatalf("expected cloned singular spec config to be isolated, got %#v", cloned.Spec.Config)
+	}
+	if cloned.Specs[0].Config["retention.ms"] != "60000" {
+		t.Fatalf("expected cloned plural spec config to be isolated, got %#v", cloned.Specs[0].Config)
+	}
+	if cloned.Changes[0].To != "3" {
+		t.Fatalf("expected cloned changes to be isolated, got %#v", cloned.Changes)
+	}
+}
+
+func TestTopicApplyResultCloneCopiesDescriptions(t *testing.T) {
+	result := TopicApplyResult{
+		Applied: []TopicDescription{{Name: "orders", Config: map[string]string{"cleanup.policy": "delete"}}},
+		DryRun:  true,
+	}
+
+	cloned := result.Clone()
+	result.Applied[0].Config["cleanup.policy"] = "compact"
+
+	if cloned.Applied[0].Config["cleanup.policy"] != "delete" {
+		t.Fatalf("expected cloned applied descriptions to be isolated, got %#v", cloned.Applied)
+	}
+	if !cloned.DryRun {
+		t.Fatal("expected cloned dry-run flag to be preserved")
+	}
+}
+
 func TestConfigSanitizeMasksKafkaSecrets(t *testing.T) {
 	sanitized := Config{
 		Name:    "kafkax",
@@ -103,7 +211,16 @@ func TestPublicKafkaAPIExposesNoThirdPartyConcreteTypes(t *testing.T) {
 		reflect.TypeOf((*Consumer)(nil)).Elem(),
 		reflect.TypeOf((*Admin)(nil)).Elem(),
 		reflect.TypeOf(Message{}),
+		reflect.TypeOf(ProduceResult{}),
+		reflect.TypeOf(BatchProduceResult{}),
+		reflect.TypeOf(Subscription{}),
+		reflect.TypeOf(TopicPartition{}),
+		reflect.TypeOf(Record{}),
+		reflect.TypeOf(RecordBatch{}),
 		reflect.TypeOf(TopicSpec{}),
+		reflect.TypeOf(TopicDescription{}),
+		reflect.TypeOf(TopicPlan{}),
+		reflect.TypeOf(TopicApplyResult{}),
 		reflect.TypeOf(Config{}),
 	} {
 		assertNoThirdPartyKafkaType(t, typ, map[reflect.Type]bool{})
@@ -112,8 +229,16 @@ func TestPublicKafkaAPIExposesNoThirdPartyConcreteTypes(t *testing.T) {
 
 type fakeProducer struct{}
 
-func (*fakeProducer) Produce(context.Context, Message, ...ProduceOption) (ProduceResult, error) {
+func (*fakeProducer) Send(context.Context, Message, ...ProduceOption) (ProduceResult, error) {
 	return ProduceResult{}, nil
+}
+
+func (*fakeProducer) SendBatch(context.Context, []Message, ...ProduceOption) (BatchProduceResult, error) {
+	return BatchProduceResult{}, nil
+}
+
+func (*fakeProducer) Flush(context.Context) error {
+	return nil
 }
 
 func (*fakeProducer) Close(context.Context) error {
@@ -122,15 +247,23 @@ func (*fakeProducer) Close(context.Context) error {
 
 type fakeConsumer struct{}
 
-func (*fakeConsumer) Subscribe(context.Context, Subscription) error {
+func (*fakeConsumer) Run(context.Context, Handler) error {
 	return nil
 }
 
-func (*fakeConsumer) Receive(context.Context) (ConsumerMessage, error) {
-	return ConsumerMessage{}, nil
+func (*fakeConsumer) Poll(context.Context) (RecordBatch, error) {
+	return RecordBatch{}, nil
 }
 
-func (*fakeConsumer) Commit(context.Context, ConsumerMessage) error {
+func (*fakeConsumer) Commit(context.Context, ...Offset) error {
+	return nil
+}
+
+func (*fakeConsumer) Pause(context.Context, ...TopicPartition) error {
+	return nil
+}
+
+func (*fakeConsumer) Resume(context.Context, ...TopicPartition) error {
 	return nil
 }
 
@@ -140,16 +273,16 @@ func (*fakeConsumer) Close(context.Context) error {
 
 type fakeAdmin struct{}
 
-func (*fakeAdmin) DescribeTopic(context.Context, string) (TopicDescription, error) {
-	return TopicDescription{}, nil
+func (*fakeAdmin) DescribeTopics(context.Context, ...string) ([]TopicDescription, error) {
+	return nil, nil
 }
 
-func (*fakeAdmin) PlanTopic(context.Context, TopicSpec) (TopicPlan, error) {
+func (*fakeAdmin) PlanTopics(context.Context, ...TopicSpec) (TopicPlan, error) {
 	return TopicPlan{}, nil
 }
 
-func (*fakeAdmin) ApplyTopic(context.Context, TopicPlan) error {
-	return nil
+func (*fakeAdmin) ApplyTopics(context.Context, TopicPlan) (TopicApplyResult, error) {
+	return TopicApplyResult{}, nil
 }
 
 func (*fakeAdmin) Close(context.Context) error {

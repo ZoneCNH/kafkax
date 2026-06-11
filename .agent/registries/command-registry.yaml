@@ -163,6 +163,21 @@ commands:
   - name: integration
     phase: P0
     target: integration
+  - name: kafka-contract
+    phase: P0
+    target: kafka-contract
+  - name: kafka-integration
+    phase: P0
+    target: kafka-integration
+  - name: kafka-fault-injection
+    phase: P0
+    target: kafka-fault-injection
+  - name: kafka-metrics-golden
+    phase: P0
+    target: kafka-metrics-golden
+  - name: kafka-admin-golden
+    phase: P0
+    target: kafka-admin-golden
   - name: release-evidence-check
     phase: P0
     target: release-evidence-check

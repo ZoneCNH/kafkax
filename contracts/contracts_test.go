@@ -143,6 +143,10 @@ func TestKafkaTopicContractMatchesPublicTopicSpec(t *testing.T) {
 	requireSchemaFieldMapsToStructField(t, schema, topicType, "name", "Name", "string")
 	requireSchemaFieldMapsToStructField(t, schema, topicType, "partitions", "Partitions", "integer")
 	requireSchemaFieldMapsToStructField(t, schema, topicType, "replication_factor", "ReplicationFactor", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "retention_ms", "Retention", "integer")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "cleanup_policy", "CleanupPolicy", "string")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "compression", "Compression", "string")
+	requireSchemaFieldMapsToStructField(t, schema, topicType, "min_in_sync_replicas", "MinInSyncReplicas", "integer")
 	requireSchemaFieldMapsToStructField(t, schema, topicType, "config", "Config", "object")
 }
 

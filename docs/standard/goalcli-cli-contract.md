@@ -47,6 +47,11 @@
 - `evidence`
 - `manifest`
 - `integration`
+- `kafka-contract`
+- `kafka-integration`
+- `kafka-fault-injection`
+- `kafka-metrics-golden`
+- `kafka-admin-golden`
 - `rules-verify`
 - `release-evidence-check`
 - `release-evidence-checksum-check`
@@ -90,6 +95,12 @@
 `goalcli downstream-sync-plan [--impact-report <path>] [--output <path>|-] [--workspace-root <path>] [--format markdown|json]` 读取 `release/standard-impact/latest.md` 的同步判定，默认生成 `release/downstream-sync/latest.md`，并在 stdout 输出符合 `contracts/goalcli-report.schema.json` 的 JSON report。传入 `--output -` 时才把 markdown/json 计划写入 stdout。
 
 该命令只生成本地同步计划和命令清单，不修改 downstream 仓库，不更新 `.agent/registries/downstream-adoption-status.yaml` 或 `.agent/evidence/truth-state.yaml`，不得作为 proof-based adoption。计划必须列出 `kernel`、L1、L2 和 `x.go` 的 blocked/not_required 结论，并保留 `adoption_claim=not_claimed`。
+
+## Kafka L2 gate commands
+
+`goalcli kafka-contract` 是 REQ-012 的本地静态 contract gate，用于检查 driver-neutral public API、Kafka schema、Harness gate 文档、API guard tests 和 `testkit` fake evidence 是否保持同步；通过时输出 `status=passed`。
+
+`goalcli kafka-integration [--broker-fixture <path>]`、`goalcli kafka-fault-injection [--broker-fixture <path>]`、`goalcli kafka-metrics-golden [--broker-fixture <path>]` 和 `goalcli kafka-admin-golden [--broker-fixture <path>]` 是 broker-dependent gate surface。当前没有生产 Kafka driver 与真实 broker fixture evidence 时，这些命令必须输出 `status=gap` 并返回非 0；`KAFKAX_BROKER_FIXTURE` 或 `--broker-fixture` 只能记录 fixture intent，不能把 `FakeKafka` testkit 证据升级为 release usable broker evidence。
 
 ## P1 commands
 

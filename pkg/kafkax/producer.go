@@ -6,8 +6,8 @@ import (
 )
 
 type Producer interface {
-	Send(context.Context, Message) (ProduceResult, error)
-	SendBatch(context.Context, []Message) (BatchProduceResult, error)
+	Send(context.Context, Message, ...ProduceOption) (ProduceResult, error)
+	SendBatch(context.Context, []Message, ...ProduceOption) (BatchProduceResult, error)
 	Flush(context.Context) error
 	Close(context.Context) error
 }

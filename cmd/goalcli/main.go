@@ -148,6 +148,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return runExternal(stdin, stdout, stderr, "./scripts/docker/docker_gate.sh", append([]string{"contract"}, args[1:]...)...)
 	case "evidence", "manifest":
 		return runExternal(stdin, stdout, stderr, "go", "run", "./internal/tools/releasemanifest", "--out", "release/manifest/latest.json")
+	case "kafka-contract":
+		return runKafkaContract(args[1:], stdout, stderr)
+	case "kafka-integration", "kafka-fault-injection", "kafka-metrics-golden", "kafka-admin-golden":
+		return runKafkaBrokerGate(args[0], args[1:], stdout, stderr)
 	case "integration":
 		return runExternal(stdin, stdout, stderr, "./scripts/run_integration.sh")
 	case "release-evidence-check":
@@ -419,6 +423,11 @@ commands:
   governance-fixture-test
   install-runtime [--dry-run]
   integration
+  kafka-admin-golden [--broker-fixture <path>]
+  kafka-contract
+  kafka-fault-injection [--broker-fixture <path>]
+  kafka-integration [--broker-fixture <path>]
+  kafka-metrics-golden [--broker-fixture <path>]
   implementation-debt [debt args]
   issue-registry
   main-guard [--context local_write|local_readonly|ci_pull_request|ci_main_verify|release_verify]

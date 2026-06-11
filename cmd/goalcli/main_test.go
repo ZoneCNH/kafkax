@@ -240,6 +240,96 @@ func TestEmitReportStatusExitCodes(t *testing.T) {
 	}
 }
 
+func TestKafkaContractGatePassesCurrentStaticSurface(t *testing.T) {
+	chdir(t, repoRoot(t))
+
+	var stdout, stderr bytes.Buffer
+	got := run([]string{"kafka-contract"}, strings.NewReader(""), &stdout, &stderr)
+	if got != 0 {
+		t.Fatalf("kafka-contract exit = %d; stderr = %s; stdout = %s", got, stderr.String(), stdout.String())
+	}
+
+	var report gateReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decode report: %v; stdout = %s", err, stdout.String())
+	}
+	if report.Command != "kafka-contract" {
+		t.Fatalf("report command = %q; want kafka-contract", report.Command)
+	}
+	if report.Status != "passed" {
+		t.Fatalf("report status = %q; want passed; gaps = %v", report.Status, report.Gaps)
+	}
+	if len(report.Gaps) != 0 {
+		t.Fatalf("report gaps = %v; want none", report.Gaps)
+	}
+}
+
+func TestKafkaBrokerGatesReportGapUntilDriverAndBrokerEvidenceExist(t *testing.T) {
+	chdir(t, repoRoot(t))
+
+	tests := []string{
+		"kafka-integration",
+		"kafka-fault-injection",
+		"kafka-metrics-golden",
+		"kafka-admin-golden",
+	}
+
+	for _, command := range tests {
+		t.Run(command, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			got := run([]string{command}, strings.NewReader(""), &stdout, &stderr)
+			if got != 1 {
+				t.Fatalf("%s exit = %d; want 1; stderr = %s; stdout = %s", command, got, stderr.String(), stdout.String())
+			}
+
+			var report gateReport
+			if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+				t.Fatalf("decode report: %v; stdout = %s", err, stdout.String())
+			}
+			if report.Command != command {
+				t.Fatalf("report command = %q; want %s", report.Command, command)
+			}
+			if report.Status != "gap" {
+				t.Fatalf("report status = %q; want gap", report.Status)
+			}
+			joinedGaps := strings.Join(report.Gaps, "\n")
+			for _, want := range []string{
+				"production Kafka driver is not implemented",
+				"broker-backed Kafka evidence is required",
+				"FakeKafka testkit evidence cannot satisfy broker-backed release evidence",
+			} {
+				if !strings.Contains(joinedGaps, want) {
+					t.Fatalf("gaps = %q; want %q", joinedGaps, want)
+				}
+			}
+		})
+	}
+}
+
+func TestKafkaBrokerGateAcceptsFixtureFlagButStillReportsDriverGap(t *testing.T) {
+	chdir(t, repoRoot(t))
+
+	var stdout, stderr bytes.Buffer
+	got := run([]string{"kafka-integration", "--broker-fixture", "redpanda-local"}, strings.NewReader(""), &stdout, &stderr)
+	if got != 1 {
+		t.Fatalf("kafka-integration exit = %d; want 1; stderr = %s; stdout = %s", got, stderr.String(), stdout.String())
+	}
+
+	var report gateReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decode report: %v; stdout = %s", err, stdout.String())
+	}
+	if report.Status != "gap" {
+		t.Fatalf("report status = %q; want gap", report.Status)
+	}
+	if !strings.Contains(strings.Join(report.Details, "\n"), "broker_fixture=redpanda-local") {
+		t.Fatalf("details = %v; want broker fixture detail", report.Details)
+	}
+	if !strings.Contains(strings.Join(report.Gaps, "\n"), "production Kafka driver is not implemented") {
+		t.Fatalf("gaps = %v; want production driver gap", report.Gaps)
+	}
+}
+
 func TestRunDispatchesExternalCommands(t *testing.T) {
 	root := t.TempDir()
 	writeGateScript(t, root, "scripts/check_boundary.sh")

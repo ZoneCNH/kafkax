@@ -90,6 +90,92 @@ func TestCloseIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestClientExposesInjectedKafkaDrivers(t *testing.T) {
+	producer := &fakeProducer{}
+	consumer := &fakeConsumer{}
+	admin := &fakeAdmin{}
+	client, err := New(
+		context.Background(),
+		Config{Name: "kafkax", Consumer: ConsumerConfig{GroupID: "workers", StartOffset: OffsetResetEarliest}},
+		WithProducer(producer),
+		WithConsumer(consumer),
+		WithAdmin(admin),
+	)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	gotProducer, err := client.Producer()
+	if err != nil {
+		t.Fatalf("producer: %v", err)
+	}
+	if gotProducer != producer {
+		t.Fatalf("expected injected producer, got %#v", gotProducer)
+	}
+	gotConsumer, err := client.Consumer("", "orders")
+	if err != nil {
+		t.Fatalf("consumer: %v", err)
+	}
+	if gotConsumer != consumer {
+		t.Fatalf("expected injected consumer, got %#v", gotConsumer)
+	}
+	gotAdmin, err := client.Admin()
+	if err != nil {
+		t.Fatalf("admin: %v", err)
+	}
+	if gotAdmin != admin {
+		t.Fatalf("expected injected admin, got %#v", gotAdmin)
+	}
+}
+
+func TestClientConsumerFactoryReceivesClonedSubscription(t *testing.T) {
+	var captured Subscription
+	client, err := New(
+		context.Background(),
+		Config{Name: "kafkax", Consumer: ConsumerConfig{GroupID: "workers", StartOffset: OffsetResetLatest}},
+		WithConsumerFactory(func(subscription Subscription) (Consumer, error) {
+			captured = subscription.Clone()
+			subscription.Topics[0] = "mutated"
+			return &fakeConsumer{}, nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	if _, err := client.Consumer("", "orders"); err != nil {
+		t.Fatalf("consumer: %v", err)
+	}
+	if captured.GroupID != "workers" || captured.StartOffset != OffsetResetLatest {
+		t.Fatalf("expected config defaults to be applied, got %#v", captured)
+	}
+	if got := captured.Topics[0]; got != "orders" {
+		t.Fatalf("expected cloned topic to preserve caller value, got %q", got)
+	}
+}
+
+func TestClientDriversRejectMissingOrClosedState(t *testing.T) {
+	client, err := New(context.Background(), Config{Name: "kafkax"})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if _, err := client.Producer(); !IsKind(err, ErrorKindDriver) {
+		t.Fatalf("expected missing producer driver error, got %T %[1]v", err)
+	}
+	if _, err := client.Consumer("workers", "orders"); !IsKind(err, ErrorKindDriver) {
+		t.Fatalf("expected missing consumer driver error, got %T %[1]v", err)
+	}
+	if _, err := client.Admin(); !IsKind(err, ErrorKindDriver) {
+		t.Fatalf("expected missing admin driver error, got %T %[1]v", err)
+	}
+	if err := client.Close(context.Background()); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if _, err := client.Producer(); !IsKind(err, ErrorKindValidation) {
+		t.Fatalf("expected closed producer validation error, got %T %[1]v", err)
+	}
+}
+
 func TestCloseRejectsNilClient(t *testing.T) {
 	var client *Client
 

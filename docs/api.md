@@ -9,7 +9,7 @@
 ## 公共 API
 
 - `Config`：由用户显式提供的配置。
-- `Brokers` / `ClientID` / `Security` / `Producer` / `Consumer` / `Admin` / `Retry` / `Observability`：Kafka L2 adapter 的显式配置面。当前 contract-first skeleton 不绑定任何第三方 Kafka driver，也不在公开 API 中暴露 driver concrete type。
+- `Brokers` / `ClientID` / `Security` / `Producer` / `Consumer` / `Admin` / `Retry` / `Observability`：Kafka L2 adapter 的显式配置面。当前 contract-first / fake-first 切片不绑定任何第三方 Kafka driver，也不在公开 API 中暴露 driver concrete type。
 - `Validate`：拒绝无效配置，并返回 `ErrorKindValidation`。
 - `Sanitize`：在日志或 Evidence 采集前屏蔽敏感值。
 - `New`：基于显式配置创建客户端；拒绝 `nil`、canceled 和 expired context；成功时记录 `client_created_total`。
@@ -24,9 +24,9 @@
 ## Kafka L2 合约面
 
 - `Message` / `Header` / `Partition` / `Offset`：公开消息模型；`Clone` 必须隔离 `Key`、`Value` 和 header value，避免调用方和 driver adapter 共享可变 byte slice。
-- `Producer`：目标语义以 `Send(ctx, Message, ...SendOption) (SendResult, error)`、`SendBatch(ctx, []Message, ...SendOption) ([]SendResult, error)` 和 `Flush(ctx) error` 暴露同步投递、批量投递与关闭前 flush；实现可以映射任意 Kafka driver，但公开签名不得包含第三方 Kafka 类型。当前代码仍保留 `Produce` skeleton，后续实现不得把 driver concrete type 泄漏到公共 API。
-- `Consumer`：目标语义以 `Subscribe`、`Poll`、`Run`、`Commit`、`Pause`、`Resume` 和 `Close` 暴露消费、handler lifecycle、offset commit 与背压控制；`Subscription` 使用标准 `OffsetResetPolicy`，rebalance 和 handler 失败必须映射为稳定 error kind。当前代码仍保留 `Receive` skeleton。
-- `Admin`：目标语义以 `DescribeTopics`、`PlanTopics`、`ApplyTopics` 和 `Close` 暴露批量 topic 规划与应用；`TopicSpec`、`TopicDescription` 和 `TopicPlan` 使用可序列化的标准结构，并显式表达 no-op、create、update、conflict、timeout 和 unsupported operation。当前代码仍保留单 topic skeleton。
+- `Producer`：以 `Send(ctx, Message, ...ProduceOption) (ProduceResult, error)`、`SendBatch(ctx, []Message, ...ProduceOption) (BatchProduceResult, error)` 和 `Flush(ctx) error` 暴露同步投递、批量投递与关闭前 flush；实现可以映射任意 Kafka driver，但公开签名不得包含第三方 Kafka 类型。
+- `Consumer`：以 `Run`、`Poll`、`Commit`、`Pause`、`Resume` 和 `Close` 暴露消费、handler lifecycle、offset commit 与背压控制；`Subscription` 是 driver-neutral 订阅配置模型，使用标准 `OffsetResetPolicy`。当前切片尚未实现 broker-backed subscribe lifecycle、rebalance hook 或 lag 采集。
+- `Admin`：以 `DescribeTopics`、`PlanTopics`、`ApplyTopics` 和 `Close` 暴露批量 topic 规划与应用；`TopicSpec`、`TopicDescription`、`TopicPlan` 和 `TopicApplyResult` 使用可序列化的标准结构，并显式表达 no-op、create、update、conflict、timeout 和 unsupported operation。
 - `contracts/kafkax.message.schema.json` 与 `contracts/kafkax.topic.schema.json` 是当前 Kafka 消息和 topic spec 的机器契约锚点。
 
 生成的基础库不得依赖 `x.go`。
@@ -46,8 +46,8 @@
 
 ## 当前证据边界
 
-- 本文档描述 Kafka L2 adapter 的目标 API 语义；当前仓库代码仍处于 contract-first skeleton 阶段，尚未完成 `internal/driver`、fake driver、broker-backed driver 或公共 API 命名迁移。
-- 任何完成声明必须同时提供 public API contract tests、`internal/driver` fake/testkit fixtures、broker-dependent gate 状态和 release/adoption 证据；缺少其中任一项时只能声明对应切片通过。
+- 本文档描述 Kafka L2 adapter 的目标 API 语义；当前仓库代码已完成 public API、`internal/driver` descriptor 边界、`testkit.FakeKafka` fixture 和 topic schema 的第一切片，尚未完成 production driver、broker-backed driver、broker-dependent gates 或 release/downstream adoption 证据。
+- 任何完整目标完成声明必须同时提供 public API contract tests、`internal/driver` 边界、testkit fake fixtures、broker-dependent gate 状态和 release/adoption 证据；缺少 broker、release 或 adoption 证据时只能声明对应 fake-first/contract-first 切片通过。
 
 ## 生成对齐
 

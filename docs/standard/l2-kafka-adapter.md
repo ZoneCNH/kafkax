@@ -14,12 +14,12 @@
 
 | Gate | 当前状态规则 | Evidence 要求 |
 | --- | --- | --- |
-| `kafka-contract` | required | JSON schema validity 加 `GOWORK=off make contracts`。 |
-| `kafka-integration` | driver 和 broker fixture 存在前保持 blocked | 真实 broker 运行输出；broker 不可用必须记录为 blocked，不得写成 passed。 |
-| `kafka-fault-injection` | broker fixture 存在前保持 blocked | auth、timeout、rebalance、broker unavailable 和 retry Evidence。 |
-| `kafka-metrics-golden` | metrics backend/fixture 存在前保持 blocked | 覆盖 producer、consumer、admin、connection、rebalance、lag 和 DLQ 的 golden metrics。 |
-| `kafka-admin-golden` | admin implementation 存在前保持 blocked | topic create/describe/delete 或显式 unsupported-operation Evidence。 |
+| `kafka-contract` | required | `GOWORK=off make kafka-contract` 校验 driver-neutral public API marker、Kafka schema、harness runtime 映射和 testkit/API guard marker；`GOWORK=off make contracts` 继续覆盖 JSON schema validity。 |
+| `kafka-integration` | driver 和 broker fixture 存在前保持 `status=gap` 且非零退出 | 真实 broker 运行输出；broker 不可用必须记录为 blocked gap，不得写成 passed。 |
+| `kafka-fault-injection` | broker fixture 存在前保持 `status=gap` 且非零退出 | auth、timeout、rebalance、broker unavailable 和 retry Evidence。 |
+| `kafka-metrics-golden` | metrics backend/fixture 存在前保持 `status=gap` 且非零退出 | 覆盖 producer、consumer、admin、connection、rebalance、lag 和 DLQ 的 golden metrics。 |
+| `kafka-admin-golden` | admin implementation 存在前保持 `status=gap` 且非零退出 | topic create/describe/delete 或显式 unsupported-operation Evidence。 |
 
 ## 当前切片非目标
 
-本文档不选择 Kafka driver，不新增 broker runtime，不新增 Makefile kafka targets，也不声明 downstream adoption。实现、broker Evidence 和 release Evidence 完整存在前，adoption 必须保持 `not_claimed`。
+本文档不选择 Kafka driver，不新增 broker runtime，也不声明 downstream adoption。当前切片可以新增 Makefile、goalcli 和 harness 的 Kafka gate 入口；实现、broker Evidence 和 release Evidence 完整存在前，broker-dependent gate 必须保持 `status=gap`，adoption 必须保持 `not_claimed`。

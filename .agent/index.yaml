@@ -449,6 +449,13 @@ files:
     owner: governance
     validator: docs-check
     purpose: Docker Toolchain Runtime 回顾。
+  - path: .agent/retrospective/kafkax-l2-contract-20260605.md
+    layer: archive
+    authority: historical_snapshot
+    mutability: append_only
+    owner: governance
+    validator: docs-check
+    purpose: Kafka L2 contract 回顾。
   - path: .agent/harness/gates/commit-gate.yaml
     layer: machine_contract
     authority: source_of_truth

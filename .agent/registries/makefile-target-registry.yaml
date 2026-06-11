@@ -22,6 +22,11 @@ targets:
   - debt-lifecycle-check
   - security
   - contracts
+  - kafka-contract
+  - kafka-integration
+  - kafka-fault-injection
+  - kafka-metrics-golden
+  - kafka-admin-golden
   - schema-check
   - docs-check
   - rules-verify

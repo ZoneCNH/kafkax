@@ -1267,7 +1267,7 @@ GOWORK=off make boundary
 2. `internal/driver/franz` 实现 producer。
 3. `internal/driver/franz` 实现 consumer。
 4. `internal/driver/franz` 实现 admin。
-5. `internal/driver/fake` 实现测试驱动。
+5. `testkit.FakeKafka` 提供 public API 兼容测试夹具，`internal/driver` 只保留不反向依赖 public package 的 driver descriptor 边界。
 6. 错误映射。
 7. lifecycle 和 close 语义。
 
