@@ -175,5 +175,5 @@ func kafkaBrokerFixtureDetail(value string) string {
 	if value == "" {
 		return "<unset>"
 	}
-	return value
+	return "<set:redacted>"
 }
