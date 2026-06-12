@@ -310,7 +310,8 @@ func TestKafkaBrokerGateAcceptsFixtureFlagButStillReportsDriverGap(t *testing.T)
 	chdir(t, repoRoot(t))
 
 	var stdout, stderr bytes.Buffer
-	got := run([]string{"kafka-integration", "--broker-fixture", "redpanda-local"}, strings.NewReader(""), &stdout, &stderr)
+	fixture := "redpanda-local"
+	got := run([]string{"kafka-integration", "--broker-fixture", fixture}, strings.NewReader(""), &stdout, &stderr)
 	if got != 1 {
 		t.Fatalf("kafka-integration exit = %d; want 1; stderr = %s; stdout = %s", got, stderr.String(), stdout.String())
 	}
@@ -322,11 +323,48 @@ func TestKafkaBrokerGateAcceptsFixtureFlagButStillReportsDriverGap(t *testing.T)
 	if report.Status != "gap" {
 		t.Fatalf("report status = %q; want gap", report.Status)
 	}
-	if !strings.Contains(strings.Join(report.Details, "\n"), "broker_fixture=redpanda-local") {
-		t.Fatalf("details = %v; want broker fixture detail", report.Details)
+	joinedDetails := strings.Join(report.Details, "\n")
+	if !strings.Contains(joinedDetails, "broker_fixture=<set:redacted>") {
+		t.Fatalf("details = %v; want redacted broker fixture detail", report.Details)
+	}
+	if strings.Contains(stdout.String(), fixture) || strings.Contains(stderr.String(), fixture) {
+		t.Fatalf("broker fixture value leaked into command output")
 	}
 	if !strings.Contains(strings.Join(report.Gaps, "\n"), "production Kafka driver is not implemented") {
 		t.Fatalf("gaps = %v; want production driver gap", report.Gaps)
+	}
+}
+
+func TestKafkaBrokerGateRedactsFixtureEnvValue(t *testing.T) {
+	chdir(t, repoRoot(t))
+	fixture := "broker://" + "fixture-user" + ":" + "fixture-pass" + "@redpanda.local:9092/path?token=" + "fixture-token"
+	t.Setenv(kafkaBrokerFixtureEnv, fixture)
+
+	var stdout, stderr bytes.Buffer
+	got := run([]string{"kafka-integration"}, strings.NewReader(""), &stdout, &stderr)
+	if got != 1 {
+		t.Fatalf("kafka-integration exit = %d; want 1; stderr = %s; stdout = %s", got, stderr.String(), stdout.String())
+	}
+
+	var report gateReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decode report: %v; stdout = %s", err, stdout.String())
+	}
+	if report.Status != "gap" {
+		t.Fatalf("report status = %q; want gap", report.Status)
+	}
+	joinedDetails := strings.Join(report.Details, "\n")
+	if !strings.Contains(joinedDetails, "broker_fixture=<set:redacted>") {
+		t.Fatalf("details = %v; want redacted broker fixture detail", report.Details)
+	}
+	combinedOutput := stdout.String() + stderr.String()
+	for _, leaked := range []string{fixture, "fixture-pass", "fixture-token"} {
+		if strings.Contains(combinedOutput, leaked) {
+			t.Fatalf("broker fixture secret material leaked into command output")
+		}
+	}
+	if strings.Contains(strings.Join(report.Gaps, "\n"), kafkaBrokerFixtureEnv+" is not set") {
+		t.Fatalf("gaps = %v; did not expect missing fixture gap when env is set", report.Gaps)
 	}
 }
 
