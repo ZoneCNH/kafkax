@@ -21,7 +21,7 @@
 
 生命周期指标由 `New`、`Close` 和 `HealthCheck` 直接记录；请求、耗时、重试和 inflight 指标作为生成具体库后的扩展 contract。
 
-Kafka L2 adapter/factory 的扩展指标由 `docs/metrics.md` 和 `contracts/kafkax.metrics.schema.json` 约束，至少覆盖 producer、consumer、admin、connection、rebalance、lag 和 DLQ。未接入真实 driver/broker 前，这些指标是 contract surface；`kafka-metrics-golden` 只能记录 blocked，不能记录 passed。
+Kafka L2 adapter/factory 的扩展指标由 `docs/metrics.md` 和 `contracts/kafkax.metrics.schema.json` 约束，至少覆盖 producer、consumer、admin、connection、rebalance、lag 和 DLQ。`kafka-metrics-golden` 必须用真实 broker fixture 证明 label allowlist 与脱敏；未配置 fixture 时只能记录 blocked/gap，不能记录 passed。
 
 ## 健康检查
 

@@ -199,6 +199,32 @@ replace_in_text_files() {
   )
 }
 
+rename_path_prefix() {
+  local dir="$1"
+  local from_prefix="$2"
+  local to_prefix="$3"
+
+  [[ -d "$dir" ]] || return 0
+
+  while IFS= read -r -d '' path; do
+    local base
+    local new_base
+    base="$(basename "$path")"
+    new_base="${base/#$from_prefix/$to_prefix}"
+    [[ "$base" != "$new_base" ]] || continue
+    mv "$path" "$(dirname "$path")/$new_base"
+  done < <(find "$dir" -maxdepth 1 -type f -name "${from_prefix}*" -print0)
+}
+
+rename_rendered_filenames() {
+  if [[ "$module_name" == "kafkax" ]]; then
+    return 0
+  fi
+
+  rename_path_prefix "$out_dir/contracts" "kafkax." "$module_name."
+  rename_path_prefix "$out_dir/.agent/retrospective" "kafkax-" "$module_name-"
+}
+
 replace_in_text_files 'kafkax' "$module_name"
 replace_in_text_files 'github.com/ZoneCNH/kafkax' "$module_path"
 replace_in_text_files 'kafkax' "$package_name"
@@ -212,6 +238,7 @@ replace_in_text_files 'kafkax_' "${package_name}_"
 replace_in_text_files 'Kafkax' "$package_title"
 replace_in_text_files 'KAFKAX' "$package_upper"
 replace_in_text_files 'kafkax' "$package_name"
+rename_rendered_filenames
 
 (
   cd "$out_dir"

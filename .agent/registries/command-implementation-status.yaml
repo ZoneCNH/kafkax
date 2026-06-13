@@ -79,8 +79,8 @@ groups:
     implementation_status: implemented
     execution_status: not_run
     release_usable: false
-    evidence_strength: gap_report_only
-    note: "Kafka L2 broker-dependent gates 当前只输出 gap report；生产 driver、broker fixture 和 golden Evidence 完成前不得作为 release usable。"
+    evidence_strength: broker_fixture_required
+    note: "Kafka L2 broker-dependent gates 无真实 broker fixture 时输出 gap report；提供 fixture 时必须使用 production driver 生成 broker-backed Evidence，downstream adoption 仍需独立证明。"
     commands:
       - kafka-integration
       - kafka-fault-injection

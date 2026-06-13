@@ -63,17 +63,17 @@ Full Goal Runtime v3.1 以 `cmd/goalcli` 作为 Go gate runtime。Makefile targe
 
 ## Kafka L2 Adapter Gates
 
-Kafka L2 adapter factory 当前只声明 driver-neutral contract surface；没有 approved driver、broker fixture 或 broker runtime Evidence 时，broker-dependent gate 不得升级为通过。
+Kafka L2 adapter factory 的公共面保持 driver-neutral；broker-dependent gate 只有在 production driver、真实 broker fixture 和运行 Evidence 同时存在时才能升级为通过。fixture 缺失时必须输出 `status=gap`。
 
-运行时映射位于 `.agent/harness/harness.yaml`：`kafka_contract` 是 `required_gates` 的静态 L2 gate；`kafka_integration`、`kafka_fault_injection`、`kafka_metrics_golden` 和 `kafka_admin_golden` 是 `extended_gates` 的 broker evidence gap nodes。goalcli report 使用 `status=gap` 表达 blocked gap，不能被 release 或 downstream adoption 证据解释为通过。
+运行时映射位于 `.agent/harness/harness.yaml`：`kafka_contract` 是 `required_gates` 的静态 L2 gate；`kafka_integration`、`kafka_fault_injection`、`kafka_metrics_golden` 和 `kafka_admin_golden` 是 `extended_gates` 的 broker evidence nodes。goalcli report 使用 `status=gap` 表达缺失 fixture 或不可用 broker，不能被 release 或 downstream adoption 证据解释为通过。
 
 | Gate | 当前证据 | 状态语义 |
 | --- | --- | --- |
 | `kafka-contract` | `contracts/l2-kafka-adapter.schema.json`、`contracts/kafkax.config.schema.json`、`contracts/kafkax.message.schema.json`、`contracts/kafkax.topic.schema.json`、`contracts/kafkax.metrics.schema.json`、`docs/standard/l2-kafka-adapter.md` | 可由静态 docs/schema/contract 检查覆盖 |
-| `kafka-integration` | 需要真实 Kafka broker、driver 选择、producer/consumer/admin smoke 和 Evidence artifact | 未实现前 goalcli 必须输出 `status=gap` 且非零退出，不得写成 `passed` |
-| `kafka-fault-injection` | 需要 broker outage、retry/backoff、rebalance 和 DLQ 证据 | 未实现前 goalcli 必须输出 `status=gap` 且非零退出 |
-| `kafka-metrics-golden` | 需要 metrics golden fixture 证明 label allowlist、secret/message-value 不泄露 | 未实现前 goalcli 必须输出 `status=gap` 且非零退出 |
-| `kafka-admin-golden` | 需要 topic/admin golden fixture 和 broker 版本记录 | 未实现前 goalcli 必须输出 `status=gap` 且非零退出 |
+| `kafka-integration` | 真实 Kafka broker、`pkg/kafkax/kafkago` production driver、producer/consumer/admin smoke 和 Evidence artifact | 无 fixture 时为 `gap`；有 fixture 时必须执行 broker-backed gate，不得写成 mock-only passed |
+| `kafka-fault-injection` | broker unavailable、auth failure、retry/backoff 和 close/flush 证据 | 无 fixture 时为 `gap`；有 fixture 时必须执行失败模式验证 |
+| `kafka-metrics-golden` | metrics golden fixture 证明 label allowlist、secret/message-value 不泄露 | 无 fixture 时为 `gap`；有 fixture 时必须证明指标脱敏 |
+| `kafka-admin-golden` | topic/admin golden fixture 和 broker 版本记录 | 无 fixture 时为 `gap`；有 fixture 时必须执行 admin smoke |
 
 Kafka L2 公共 API、config、error、health、metrics 和 release manifest 仍遵守 L2 公有边界：不得暴露第三方 Kafka driver 类型，不得依赖 `x.go`，不得把 broker-dependent gate 的缺口包装为下游 adoption 通过。
 

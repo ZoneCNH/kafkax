@@ -116,7 +116,9 @@ scan_fixed() {
 }
 
 scan_template_placeholders() {
-  local pattern='\{\{[^}]+\}\}|TODO_TEMPLATE'
+  # Release/template placeholders use uppercase underscore tokens. Keep this
+  # strict so Go composite literals like []T{{Field: value}} are not flagged.
+  local pattern='\{\{[[:space:]]*[A-Z][A-Z0-9_]*[[:space:]]*\}\}|TODO_TEMPLATE'
 
   if command -v rg >/dev/null 2>&1; then
     if rg -n --hidden \

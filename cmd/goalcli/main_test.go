@@ -264,7 +264,7 @@ func TestKafkaContractGatePassesCurrentStaticSurface(t *testing.T) {
 	}
 }
 
-func TestKafkaBrokerGatesReportGapUntilDriverAndBrokerEvidenceExist(t *testing.T) {
+func TestKafkaBrokerGatesRequireBrokerFixtureEvidence(t *testing.T) {
 	chdir(t, repoRoot(t))
 
 	tests := []string{
@@ -294,9 +294,9 @@ func TestKafkaBrokerGatesReportGapUntilDriverAndBrokerEvidenceExist(t *testing.T
 			}
 			joinedGaps := strings.Join(report.Gaps, "\n")
 			for _, want := range []string{
-				"production Kafka driver is not implemented",
 				"broker-backed Kafka evidence is required",
 				"FakeKafka testkit evidence cannot satisfy broker-backed release evidence",
+				kafkaBrokerFixtureEnv + " is not set",
 			} {
 				if !strings.Contains(joinedGaps, want) {
 					t.Fatalf("gaps = %q; want %q", joinedGaps, want)
@@ -306,11 +306,11 @@ func TestKafkaBrokerGatesReportGapUntilDriverAndBrokerEvidenceExist(t *testing.T
 	}
 }
 
-func TestKafkaBrokerGateAcceptsFixtureFlagButStillReportsDriverGap(t *testing.T) {
+func TestKafkaBrokerGateRedactsInvalidFixtureFlag(t *testing.T) {
 	chdir(t, repoRoot(t))
 
 	var stdout, stderr bytes.Buffer
-	fixture := "redpanda-local"
+	fixture := "KAFKA_USERNAME=fixture-user KAFKA_PASSWORD=fixture-pass"
 	got := run([]string{"kafka-integration", "--broker-fixture", fixture}, strings.NewReader(""), &stdout, &stderr)
 	if got != 1 {
 		t.Fatalf("kafka-integration exit = %d; want 1; stderr = %s; stdout = %s", got, stderr.String(), stdout.String())
@@ -320,24 +320,27 @@ func TestKafkaBrokerGateAcceptsFixtureFlagButStillReportsDriverGap(t *testing.T)
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatalf("decode report: %v; stdout = %s", err, stdout.String())
 	}
-	if report.Status != "gap" {
-		t.Fatalf("report status = %q; want gap", report.Status)
+	if report.Status != "failed" {
+		t.Fatalf("report status = %q; want failed", report.Status)
 	}
 	joinedDetails := strings.Join(report.Details, "\n")
 	if !strings.Contains(joinedDetails, "broker_fixture=<set:redacted>") {
 		t.Fatalf("details = %v; want redacted broker fixture detail", report.Details)
 	}
-	if strings.Contains(stdout.String(), fixture) || strings.Contains(stderr.String(), fixture) {
-		t.Fatalf("broker fixture value leaked into command output")
+	combinedOutput := stdout.String() + stderr.String()
+	for _, leaked := range []string{fixture, "fixture-user", "fixture-pass"} {
+		if strings.Contains(combinedOutput, leaked) {
+			t.Fatalf("broker fixture value leaked into command output")
+		}
 	}
-	if !strings.Contains(strings.Join(report.Gaps, "\n"), "production Kafka driver is not implemented") {
-		t.Fatalf("gaps = %v; want production driver gap", report.Gaps)
+	if strings.Contains(strings.Join(report.Gaps, "\n"), "production Kafka driver is not implemented") {
+		t.Fatalf("gaps = %v; did not expect production driver gap", report.Gaps)
 	}
 }
 
 func TestKafkaBrokerGateRedactsFixtureEnvValue(t *testing.T) {
 	chdir(t, repoRoot(t))
-	fixture := "broker://" + "fixture-user" + ":" + "fixture-pass" + "@redpanda.local:9092/path?token=" + "fixture-token"
+	fixture := "KAFKA_USERNAME=fixture-user KAFKA_PASSWORD=fixture-pass KAFKA_TOKEN=fixture-token"
 	t.Setenv(kafkaBrokerFixtureEnv, fixture)
 
 	var stdout, stderr bytes.Buffer
@@ -350,21 +353,94 @@ func TestKafkaBrokerGateRedactsFixtureEnvValue(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatalf("decode report: %v; stdout = %s", err, stdout.String())
 	}
-	if report.Status != "gap" {
-		t.Fatalf("report status = %q; want gap", report.Status)
+	if report.Status != "failed" {
+		t.Fatalf("report status = %q; want failed", report.Status)
 	}
 	joinedDetails := strings.Join(report.Details, "\n")
 	if !strings.Contains(joinedDetails, "broker_fixture=<set:redacted>") {
 		t.Fatalf("details = %v; want redacted broker fixture detail", report.Details)
 	}
 	combinedOutput := stdout.String() + stderr.String()
-	for _, leaked := range []string{fixture, "fixture-pass", "fixture-token"} {
+	for _, leaked := range []string{fixture, "fixture-user", "fixture-pass", "fixture-token"} {
 		if strings.Contains(combinedOutput, leaked) {
 			t.Fatalf("broker fixture secret material leaked into command output")
 		}
 	}
-	if strings.Contains(strings.Join(report.Gaps, "\n"), kafkaBrokerFixtureEnv+" is not set") {
+	joinedGaps := strings.Join(report.Gaps, "\n")
+	if strings.Contains(joinedGaps, kafkaBrokerFixtureEnv+" is not set") {
 		t.Fatalf("gaps = %v; did not expect missing fixture gap when env is set", report.Gaps)
+	}
+	if strings.Contains(joinedGaps, "production Kafka driver is not implemented") {
+		t.Fatalf("gaps = %v; did not expect production driver gap", report.Gaps)
+	}
+}
+
+func TestLoadKafkaBrokerFixtureParsesRedactedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fixture.env")
+	content := strings.Join([]string{
+		"export KAFKA_BROKERS=localhost:9092",
+		"KAFKA_SECURITY_PROTOCOL=SASL_PLAINTEXT",
+		"KAFKA_SASL_USERNAME=fixture-user",
+		"KAFKA_SASL_PASSWORD=fixture-pass",
+		"KAFKAX_TIMEOUT=2s",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	fx, err := loadKafkaBrokerFixture(path)
+	if err != nil {
+		t.Fatalf("load fixture: %v", err)
+	}
+	if got, want := strings.Join(fx.cfg.Brokers, ","), "localhost:9092"; got != want {
+		t.Fatalf("brokers = %q; want %q", got, want)
+	}
+	if fx.cfg.Security.Protocol != kafkax.SecurityProtocolSASL {
+		t.Fatalf("protocol = %q; want sasl", fx.cfg.Security.Protocol)
+	}
+	if fx.saslTLS {
+		t.Fatalf("saslTLS = true; want false")
+	}
+	if fx.cfg.Security.Password != "fixture-pass" {
+		t.Fatalf("password not parsed")
+	}
+	if fx.cfg.Timeout != 2*time.Second {
+		t.Fatalf("timeout = %s; want 2s", fx.cfg.Timeout)
+	}
+	if got := kafkaBrokerFixtureDetail(path); got != "<set:redacted>" {
+		t.Fatalf("fixture detail = %q; want redacted", got)
+	}
+}
+
+func TestLoadKafkaBrokerFixtureParsesRedactedMarkdownTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fixture.md")
+	content := strings.Join([]string{
+		"| 服务  | IP 地址   | 端口 | 用户名 | 密码           | 校验状态          |",
+		"| :---- | :-------- | :--- | :----- | :------------- | :---------------- |",
+		"| Kafka | 127.0.0.1 | 9092 | admin  | `fixture-pass` | ✅ SASL_PLAINTEXT |",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	fx, err := loadKafkaBrokerFixture(path)
+	if err != nil {
+		t.Fatalf("load fixture: %v", err)
+	}
+	if got, want := strings.Join(fx.cfg.Brokers, ","), "127.0.0.1:9092"; got != want {
+		t.Fatalf("brokers = %q; want %q", got, want)
+	}
+	if fx.cfg.Security.Protocol != kafkax.SecurityProtocolSASL {
+		t.Fatalf("protocol = %q; want sasl", fx.cfg.Security.Protocol)
+	}
+	if fx.saslTLS {
+		t.Fatalf("saslTLS = true; want false")
+	}
+	if fx.cfg.Security.Username != "admin" {
+		t.Fatalf("username not parsed")
+	}
+	if fx.cfg.Security.Password != "fixture-pass" {
+		t.Fatalf("password not parsed")
 	}
 }
 
