@@ -15,11 +15,11 @@
 | Gate | 当前状态规则 | Evidence 要求 |
 | --- | --- | --- |
 | `kafka-contract` | required | `GOWORK=off make kafka-contract` 校验 driver-neutral public API marker、Kafka schema、harness runtime 映射和 testkit/API guard marker；`GOWORK=off make contracts` 继续覆盖 JSON schema validity。 |
-| `kafka-integration` | driver 和 broker fixture 存在前保持 `status=gap` 且非零退出 | 真实 broker 运行输出；broker 不可用必须记录为 blocked gap，不得写成 passed。 |
-| `kafka-fault-injection` | broker fixture 存在前保持 `status=gap` 且非零退出 | auth、timeout、rebalance、broker unavailable 和 retry Evidence。 |
-| `kafka-metrics-golden` | metrics backend/fixture 存在前保持 `status=gap` 且非零退出 | 覆盖 producer、consumer、admin、connection、rebalance、lag 和 DLQ 的 golden metrics。 |
-| `kafka-admin-golden` | admin implementation 存在前保持 `status=gap` 且非零退出 | topic create/describe/delete 或显式 unsupported-operation Evidence。 |
+| `kafka-integration` | 未提供真实 broker fixture 时保持 `status=gap` 且非零退出；提供 fixture 时必须执行 broker-backed smoke | 真实 broker 运行输出；broker 不可用必须记录为 blocked gap，不得写成 passed。 |
+| `kafka-fault-injection` | 未提供真实 broker fixture 时保持 `status=gap` 且非零退出；提供 fixture 时必须执行失败模式验证 | auth、timeout、rebalance、broker unavailable 和 retry Evidence。 |
+| `kafka-metrics-golden` | 未提供真实 broker fixture 时保持 `status=gap` 且非零退出；提供 fixture 时必须校验指标脱敏与 label allowlist | 覆盖 producer、consumer、admin、connection、rebalance、lag 和 DLQ 的 golden metrics。 |
+| `kafka-admin-golden` | 未提供真实 broker fixture 时保持 `status=gap` 且非零退出；提供 fixture 时必须执行 topic/admin smoke | topic create/describe/delete 或显式 unsupported-operation Evidence。 |
 
-## 当前切片非目标
+## 当前 driver 切片
 
-本文档不选择 Kafka driver，不新增 broker runtime，也不声明 downstream adoption。当前切片可以新增 Makefile、goalcli 和 harness 的 Kafka gate 入口；实现、broker Evidence 和 release Evidence 完整存在前，broker-dependent gate 必须保持 `status=gap`，adoption 必须保持 `not_claimed`。
+当前仓库提供可选的 `pkg/kafkax/kafkago` production driver，基于 `github.com/segmentio/kafka-go` 适配 `pkg/kafkax` 的 driver-neutral public API。Broker-dependent gates 通过 `KAFKAX_BROKER_FIXTURE` 或 `--broker-fixture` 读取真实 broker fixture；fixture 缺失时必须继续输出 `status=gap`，fixture 存在时不得使用 `testkit.FakeKafka` 替代 broker Evidence。Downstream adoption 仍必须由独立 release/adoption Evidence 声明，不能只由本仓库 broker gate 通过推导。

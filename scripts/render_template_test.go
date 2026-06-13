@@ -94,6 +94,63 @@ func TestRenderTemplateIncludesGoalcliControlPlane(t *testing.T) {
 	}
 }
 
+func TestRenderTemplateRenamesModuleScopedFilenames(t *testing.T) {
+	templateModuleName := "kaf" + "kax"
+	outDir := filepath.Join(t.TempDir(), "kernel")
+	cmd := exec.Command(
+		"bash",
+		"render_template.sh",
+		"--module-name",
+		"kernel",
+		"--module-path",
+		"github.com/ZoneCNH/kernel",
+		"--package-name",
+		"kernel",
+		"--out",
+		outDir,
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("render template: %v\n%s", err, output)
+	}
+
+	for _, required := range []string{
+		filepath.Join("contracts", "kernel.config.schema.json"),
+		filepath.Join("contracts", "kernel.message.schema.json"),
+		filepath.Join("contracts", "kernel.topic.schema.json"),
+		filepath.Join("contracts", "kernel.metrics.schema.json"),
+		filepath.Join(".agent", "retrospective", "kernel-l2-contract-20260605.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(outDir, required)); err != nil {
+			t.Fatalf("rendered template missing renamed path %s: %v", required, err)
+		}
+	}
+
+	for _, stale := range []string{
+		filepath.Join("contracts", templateModuleName+".config.schema.json"),
+		filepath.Join("contracts", templateModuleName+".message.schema.json"),
+		filepath.Join("contracts", templateModuleName+".topic.schema.json"),
+		filepath.Join("contracts", templateModuleName+".metrics.schema.json"),
+		filepath.Join(".agent", "retrospective", templateModuleName+"-l2-contract-20260605.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(outDir, stale)); !os.IsNotExist(err) {
+			t.Fatalf("rendered template kept stale path %s: %v", stale, err)
+		}
+	}
+
+	index, err := os.ReadFile(filepath.Join(outDir, ".agent", "index.yaml"))
+	if err != nil {
+		t.Fatalf("read rendered agent index: %v", err)
+	}
+	if !strings.Contains(string(index), ".agent/retrospective/kernel-l2-contract-20260605.md") {
+		t.Fatalf("rendered agent index missing renamed retrospective path")
+	}
+	if strings.Contains(string(index), ".agent/retrospective/"+templateModuleName+"-l2-contract-20260605.md") {
+		t.Fatalf("rendered agent index still references stale retrospective path")
+	}
+}
+
 func TestRenderTemplateIncludesDockerContract(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "kernel")
 	cmd := exec.Command(
@@ -267,7 +324,8 @@ func TestRenderTemplateGitArchivePrunesRuntimeState(t *testing.T) {
 }
 
 func TestRenderTemplateGitArchiveSkipsUntrackedFiles(t *testing.T) {
-	markerPath := filepath.Join("..", ".xlib-render-untracked-marker-test")
+	markerName := ".xlib-render-untracked-marker-" + strings.NewReplacer("/", "-", " ", "_").Replace(t.Name()) + ".tmp"
+	markerPath := filepath.Join("..", markerName)
 	if err := os.WriteFile(markerPath, []byte("untracked marker"), 0o600); err != nil {
 		t.Fatalf("write untracked marker: %v", err)
 	}
@@ -295,7 +353,7 @@ func TestRenderTemplateGitArchiveSkipsUntrackedFiles(t *testing.T) {
 		t.Fatalf("render template: %v\n%s", err, output)
 	}
 
-	if _, err := os.Stat(filepath.Join(outDir, ".xlib-render-untracked-marker-test")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(outDir, markerName)); !os.IsNotExist(err) {
 		t.Fatalf("expected git archive render to skip untracked marker, stat err=%v", err)
 	}
 }

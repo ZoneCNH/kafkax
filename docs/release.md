@@ -101,7 +101,7 @@ GitHub Actions workflow 引用的第三方 Action 必须固定为 40 位 commit 
 
 发布 Evidence 生成到 `release/manifest/latest.json`，该文件是生成产物，不提交到源码历史。提交到仓库的是 `release/manifest/template.json`；CI release workflow 会上传 `latest.json` 作为 artifact。
 
-Kafka L2 adapter factory 的 release Evidence 必须保持 contract-first 语义：`contracts/l2-kafka-adapter.schema.json`、`contracts/kafkax.config.schema.json`、`contracts/kafkax.message.schema.json`、`contracts/kafkax.topic.schema.json` 和 `contracts/kafkax.metrics.schema.json` 可以作为静态契约证据；driver、broker fixture、broker version 和 broker-dependent gate 结果只能在对应实现和真实运行证据存在时写入 manifest。当前未交付 driver 或 broker runtime 的切片中，`adoption_claim` 必须保持 `not_claimed`，`kafka-integration`、`kafka-fault-injection`、`kafka-metrics-golden` 和 `kafka-admin-golden` 必须记录为 `blocked` 或缺省，不得标记为 `passed`。
+Kafka L2 adapter factory 的 release Evidence 必须保持 contract-first 语义：`contracts/l2-kafka-adapter.schema.json`、`contracts/kafkax.config.schema.json`、`contracts/kafkax.message.schema.json`、`contracts/kafkax.topic.schema.json` 和 `contracts/kafkax.metrics.schema.json` 可以作为静态契约证据；driver、broker fixture、broker version 和 broker-dependent gate 结果只能在对应实现和真实运行证据存在时写入 manifest。未配置真实 broker fixture 时，`kafka-integration`、`kafka-fault-injection`、`kafka-metrics-golden` 和 `kafka-admin-golden` 必须记录为 `blocked`/`gap` 或缺省，不得标记为 `passed`；本仓库 broker gate 通过也不能自动推导 `adoption_claim`，downstream adoption 仍必须由独立证据声明。
 
 `latest.json` 至少包含：
 

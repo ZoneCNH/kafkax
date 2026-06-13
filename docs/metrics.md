@@ -21,4 +21,4 @@ Histograms may add `_duration_seconds` variants for producer send, consumer poll
 - Logs and metric labels must not include message values, raw keys, credentials, production connection strings, or business identifiers by default.
 - `observability.log_message_value` is fixed to `false` in `contracts/kafkax.config.schema.json` until a separate security review changes the contract.
 - Tracing may propagate caller-owned headers, but `kafkax` does not define a business trace schema.
-- Broker-dependent metrics golden evidence is blocked until a real driver and broker fixture exist; this document is a contract surface, not a passed broker gate.
+- Broker-dependent metrics golden evidence requires a real driver and broker fixture. When no fixture is configured the gate must report `status=gap`; when a fixture is configured the gate must prove label allowlist behavior and credential/message-value redaction.

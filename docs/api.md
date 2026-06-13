@@ -9,7 +9,7 @@
 ## 公共 API
 
 - `Config`：由用户显式提供的配置。
-- `Brokers` / `ClientID` / `Security` / `Producer` / `Consumer` / `Admin` / `Retry` / `Observability`：Kafka L2 adapter 的显式配置面。当前 contract-first / fake-first 切片不绑定任何第三方 Kafka driver，也不在公开 API 中暴露 driver concrete type。
+- `Brokers` / `ClientID` / `Security` / `Producer` / `Consumer` / `Admin` / `Retry` / `Observability`：Kafka L2 adapter 的显式配置面。公共 API 不绑定任何第三方 Kafka driver，也不暴露 driver concrete type；production driver 作为可选子包适配该配置面。
 - `Validate`：拒绝无效配置，并返回 `ErrorKindValidation`。
 - `Sanitize`：在日志或 Evidence 采集前屏蔽敏感值。
 - `New`：基于显式配置创建客户端；拒绝 `nil`、canceled 和 expired context；成功时记录 `client_created_total`。
@@ -46,8 +46,8 @@
 
 ## 当前证据边界
 
-- 本文档描述 Kafka L2 adapter 的目标 API 语义；当前仓库代码已完成 public API、`internal/driver` descriptor 边界、`testkit.FakeKafka` fixture 和 topic schema 的第一切片，尚未完成 production driver、broker-backed driver、broker-dependent gates 或 release/downstream adoption 证据。
-- 任何完整目标完成声明必须同时提供 public API contract tests、`internal/driver` 边界、testkit fake fixtures、broker-dependent gate 状态和 release/adoption 证据；缺少 broker、release 或 adoption 证据时只能声明对应 fake-first/contract-first 切片通过。
+- 本文档描述 Kafka L2 adapter 的目标 API 语义；当前仓库代码已完成 driver-neutral public API、`pkg/kafkax/kafkago` production driver、`testkit.FakeKafka` fixture 和 topic schema。Broker-dependent gates 只有在提供真实 broker fixture 时才能声明 passed，fixture 缺失时必须保持 gap。
+- 任何完整目标完成声明必须同时提供 public API contract tests、production driver 边界、testkit fake fixtures、broker-dependent gate 状态和 release/adoption 证据；缺少 release 或 adoption 证据时只能声明本仓库 broker gate 通过，不能推导 downstream adoption。
 
 ## 生成对齐
 

@@ -160,16 +160,16 @@ extended_gates:
     command: "GOWORK=off make release-check-extended"
   - id: kafka_integration
     command: "GOWORK=off make kafka-integration"
-    purpose: "broker-backed Kafka produce/consume integration evidence; emits gap until production driver and broker fixture exist"
+    purpose: "broker-backed Kafka produce/consume integration evidence; emits gap when no broker fixture is configured"
   - id: kafka_fault_injection
     command: "GOWORK=off make kafka-fault-injection"
-    purpose: "broker-backed Kafka failure-mode evidence; emits gap until production driver and broker fixture exist"
+    purpose: "broker-backed Kafka failure-mode evidence; emits gap when no broker fixture is configured"
   - id: kafka_metrics_golden
     command: "GOWORK=off make kafka-metrics-golden"
-    purpose: "broker-backed Kafka metrics golden evidence; emits gap until production driver and broker fixture exist"
+    purpose: "broker-backed Kafka metrics golden evidence; emits gap when no broker fixture is configured"
   - id: kafka_admin_golden
     command: "GOWORK=off make kafka-admin-golden"
-    purpose: "broker-backed Kafka admin golden evidence; emits gap until production driver and broker fixture exist"
+    purpose: "broker-backed Kafka admin golden evidence; emits gap when no broker fixture is configured"
   - id: goalcli_g12_acceptance
     command: "GOAL_ID=GOAL-20260603-XLIB-GOALCLI-001 GOWORK=off make goal-acceptance"
   - id: goalcli_g13_delivery

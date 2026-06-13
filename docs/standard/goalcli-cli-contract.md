@@ -100,7 +100,7 @@
 
 `goalcli kafka-contract` 是 REQ-012 的本地静态 contract gate，用于检查 driver-neutral public API、Kafka schema、Harness gate 文档、API guard tests 和 `testkit` fake evidence 是否保持同步；通过时输出 `status=passed`。
 
-`goalcli kafka-integration [--broker-fixture <path>]`、`goalcli kafka-fault-injection [--broker-fixture <path>]`、`goalcli kafka-metrics-golden [--broker-fixture <path>]` 和 `goalcli kafka-admin-golden [--broker-fixture <path>]` 是 broker-dependent gate surface。当前没有生产 Kafka driver 与真实 broker fixture evidence 时，这些命令必须输出 `status=gap` 并返回非 0；`KAFKAX_BROKER_FIXTURE` 或 `--broker-fixture` 只能记录 fixture intent，不能把 `FakeKafka` testkit 证据升级为 release usable broker evidence。
+`goalcli kafka-integration [--broker-fixture <path>]`、`goalcli kafka-fault-injection [--broker-fixture <path>]`、`goalcli kafka-metrics-golden [--broker-fixture <path>]` 和 `goalcli kafka-admin-golden [--broker-fixture <path>]` 是 broker-dependent gate surface。未提供真实 broker fixture 时，这些命令必须输出 `status=gap` 并返回非 0；提供 `KAFKAX_BROKER_FIXTURE` 或 `--broker-fixture` 时，命令必须使用 production driver 执行 broker-backed gate，并在 report 中脱敏 fixture、broker、username、password、token 和 message value。
 
 ## P1 commands
 
