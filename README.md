@@ -15,7 +15,7 @@ L2 适配： kafkax ← 本仓库
 L3 应用： x.go（编排层，仅消费 L2 API）
 ```
 
-kafkax 作为 L2 适配层，只表达 Kafka 基础设施语义，不表达业务语义。禁止依赖 `x.go` 或任何业务 topic/schema。
+kafkax 作为 L2 适配层，只表达 Kafka 基础设施语义，不表达业务语义。禁止依赖 `x.go` 或任何业务 topic/schema。完整执行计划见 [docs/goal/goal.md](docs/goal/goal.md)。
 
 ## API 概览
 
@@ -155,7 +155,7 @@ d, _ := kafkago.New(cfg)
 client, _ := kafkax.New(ctx, cfg, d.ClientOptions()...)
 ```
 
-调用方只需依赖 `pkg/kafkax` 的公开接口。`Driver` 接口抽象定义在 `internal/driver/driver.go`（Capability/Descriptor），用于 driver 注册和自我描述。
+调用方只需依赖 `pkg/kafkax` 的公开接口。`Driver` 接口抽象定义在 `internal/driver/driver.go`（Capability/Descriptor），用于 driver 注册和自我描述。driver 选型决策记录见 [docs/adr/](docs/adr/)。
 
 ### Fake Driver（testkit）
 
@@ -286,17 +286,6 @@ type Error struct {
 - `.agent/`：治理自动化配置（harness、rules、policies、traceability matrix）
 - `release/`：release manifest、standard impact 报告、evidence artifact
 
-## 文档入口
-
-- [Goal 执行计划](docs/goal/goal.md)：kafkax L2 标准工厂完整执行计划
-- [API 文档](docs/api.md)：公开 API 接口与使用说明
-- [配置文档](docs/config.md)：Config 字段、TLS/SASL 认证、脱敏规则
-- [错误文档](docs/errors.md)：ErrorKind 分类、Retryable 标记、恢复策略
-- [Metrics 文档](docs/metrics.md)：指标定义与 observex 集成
-- [测试策略](docs/testing.md)：单元测试、contract test、fake driver 覆盖
-- [Driver ADR](docs/adr/)：Kafka driver 实现选型决策记录
-- [发布](docs/release.md)：release gate 流程与 manifest 规范
-
 ## 命令
 
 ```bash
@@ -305,7 +294,7 @@ make ci-extended # 扩展 gate（含 extended test suite）
 make evidence    # 生成 release evidence
 ```
 
-完整 gate 链和 release 流程见 [Makefile](Makefile) 与 [docs/release.md](docs/release.md)。
+完整 gate 链见 [Makefile](Makefile)。
 
 ## 测试
 
