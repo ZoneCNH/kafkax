@@ -1,77 +1,300 @@
 # kafkax
 
-`kafkax` 是基础库标准与交付运行时仓库，承担五类职责：**Standard Source**、**Go Reference Template**、**Generator**、**Harness** 和 **Evidence Runtime**。它把基础库的公共 API、配置、错误、健康检查、metrics、测试、release Evidence、Goal Runtime 和下游生成规则放在同一套可验证工件中维护。
+`kafkax` 是 FoundationX 的 **L2 Kafka adapter 基础库**，为 FoundationX 量化交易系统提供 driver-neutral 的 Kafka 生产、消费和集群管理能力。
 
-旧名 `kafkax` 和示例名 `foundationx` 只允许出现在迁移文档语境中；新的默认下游集成目标是 `kernel`，生成库包括 `configx`、`observex`、`testkitx`、`postgresx`、`redisx`、`kafkax`、`natsx`、`taosx`、`ossx` 和 `clickhousex`。
+kafkax 遵循 xlib-standard 的治理协议，但不是标准源、不是 generator、不是模板仓库。
 
-标准源仓库 URL 为 [`kafkax`](https://github.com/ZoneCNH/kafkax)。本仓库不再把标准源与模板实现拆成两个角色：标准文本、模板、generator、Harness gate 和 Evidence runtime 必须一起通过 release gate 验证。
+仓库地址：[`kafkax`](https://github.com/ZoneCNH/kafkax)。module path：`github.com/ZoneCNH/kafkax`。
 
-## 五类职责
+## 架构定位
 
-- **Standard Source**：维护基础库 P0 标准、仓库角色、分层、模块边界、DoD、安全、release 和 Evidence 协议。
-- **Go Reference Template**：提供可编译参考包 `pkg/kafkax`、内部辅助、examples、contracts 和 testkit，用于证明标准可落地。
-- **Generator**：通过 [docs/generation.md](docs/generation.md) 与 `scripts/render_template.sh` 渲染具体基础库 module path、package name、README、docs 和 contracts。
-- **Harness**：通过 Makefile、scripts、CI 和 [.agent/harness/harness.yaml](.agent/harness/harness.yaml) 固化 required、extended、docs、boundary、integration、score 和 final gate。
-- **Evidence Runtime**：通过 [docs/standard/evidence-protocol.md](docs/standard/evidence-protocol.md)、[docs/release.md](docs/release.md)、[.agent](.agent/) 和 `release/manifest/latest.json` 记录可追溯完成状态。
+```text
+L0 基座： kernel（生命周期、依赖注入）
+L1 共享： configx、observex、testkitx、resiliencx、schedulex
+L2 适配： kafkax ← 本仓库
+L3 应用： x.go（编排层，仅消费 L2 API）
+```
+
+kafkax 作为 L2 适配层，只表达 Kafka 基础设施语义，不表达业务语义。禁止依赖 `x.go` 或任何业务 topic/schema。
+
+## API 概览
+
+### Producer
+
+```go
+type Producer interface {
+    Send(context.Context, Message, ...ProduceOption) (ProduceResult, error)
+    SendBatch(context.Context, []Message, ...ProduceOption) (BatchProduceResult, error)
+    Flush(context.Context) error
+    Close(context.Context) error
+}
+```
+
+- 支持单条发送 `Send` 和批量发送 `SendBatch`
+- `Flush` 显式刷新内部缓冲区，确保消息已提交到 broker
+- 通过 `ProduceOption` 注入 per-message headers
+
+### Consumer
+
+```go
+type Consumer interface {
+    Run(context.Context, Handler) error
+    Poll(context.Context) (RecordBatch, error)
+    Commit(context.Context, ...Offset) error
+    Pause(context.Context, ...TopicPartition) error
+    Resume(context.Context, ...TopicPartition) error
+    Close(context.Context) error
+}
+```
+
+- `Run` 驱动 consumer loop，将每条 record 分发给 `Handler`，支持 rebalance 回调
+- `Poll` 提供手动拉取模式，调用方自行控制拉取节奏
+- `Commit` 显式提交 offset
+- `Pause` / `Resume` 控制分区消费流控
+- 支持 `OffsetResetPolicy`：`earliest` / `latest` / `none`
+
+### Admin
+
+```go
+type Admin interface {
+    DescribeTopics(context.Context, ...string) ([]TopicDescription, error)
+    PlanTopics(context.Context, ...TopicSpec) (TopicPlan, error)
+    ApplyTopics(context.Context, TopicPlan) (TopicApplyResult, error)
+    Close(context.Context) error
+}
+```
+
+- `DescribeTopics` 查询 topic 元数据
+- `PlanTopics` 对比期望 spec 与集群现状，输出 diff plan
+- `ApplyTopics` 按 plan 执行 topic 创建/修改
+
+### 通用类型
+
+```go
+type Message struct {
+    Topic     string
+    Key       []byte
+    Value     []byte
+    Headers   []Header
+    Timestamp time.Time
+    Partition Partition
+    Offset    Offset
+}
+
+type Config struct {
+    Name          string
+    Timeout       time.Duration
+    Brokers       []string
+    ClientID      string
+    Security      SecurityConfig
+    Producer      ProducerConfig
+    Consumer      ConsumerConfig
+    Admin         AdminConfig
+    Retry         RetryConfig
+    Observability ObservabilityConfig
+}
+```
+
+全部公开类型提供不可变 `Clone()` 方法。所有读操作返回副本，不暴露内部引用。
+
+## Kafka 语义
+
+### Producer 确认策略
+
+Producer 通过 `ProducerConfig.RequiredAcks` 控制确认策略：
+
+| RequiredAcks | 语义 | 风险 |
+|---|---|---|
+| 0 | 不等待 broker 确认 | 消息可能丢失，无重试 |
+| 1 | 等待 leader 确认 | leader 故障时可能丢失 |
+| -1 (all) | 等待所有 ISR 确认 | 最高持久性保证 |
+
+默认推荐 `RequiredAcks = -1`（all），搭配 `MinInSyncReplicas >= 2` 使用。
+
+### 投递保证
+
+kafkax 不宣称 exactly-once。投递保证取决于 handler 与 offset commit 的时序：
+
+- **at-most-once**：先 commit offset，再处理消息。handler 崩溃时消息丢失。
+- **at-least-once**（默认）：先处理消息，再 commit offset。handler 崩溃时消息重复投递。
+
+调用方必须在 handler 中实现幂等处理以应对 at-least-once 的重复消息。Exactly-once 需要 broker 事务（`transactional.id`）、producer 幂等和 consumer 隔离级别共同配合，不属于基础 adapter 的默认语义。
+
+### Consumer Group Rebalance
+
+Consumer group rebalance 是正常运维事件，不是异常。kafkax 的 `Consumer.Run` 在 rebalance 时执行：
+
+1. **partition revoked**：停止当前分区消费，刷新内部缓冲区
+2. **partition assigned**：从最后提交的 offset 恢复消费
+
+Handler 必须在 revoke 信号到达后尽快返回，避免 rebalance 超时导致重复消费。
+
+### Offset Commit 时机
+
+- `Consumer.Run` 模式（自动提交）：每条 record 处理成功后自动 commit。handler 返回 error 时跳过 commit，record 将在下次 poll 重新投递。
+- `Consumer.Poll` 模式（手动提交）：调用方通过 `Commit` 显式提交 offset，自行决定提交粒度。
+
+### Handler Panic 行为
+
+Consumer handler 中发生的 panic 被 kafkax 捕获并转换为 `ErrorKindConsume` 错误。panic 不会导致 consumer 进程退出，但该条 record 不会被 commit。捕获 panic 后 consumer loop 继续运行，panic 记录通过 `Metrics` 上报。
+
+### 重试
+
+Producer 重试通过 `RetryConfig` 控制：
+
+```go
+type RetryConfig struct {
+    MaxAttempts int           // 最大重试次数，0 表示不重试
+    Backoff     time.Duration // 重试间隔
+}
+```
+
+重试仅适用于 `Retryable` 错误（网络超时、leader 选举、broker 不可用）。非可重试错误（序列化失败、消息过大、认证失败）直接返回，不重试。
+
+重试可能破坏顺序、放大消息重复。对顺序敏感的场景必须在 handler 中通过 idempotency key 去重。
+
+### Retry Topic / Dead Letter Topic
+
+kafkax 本身不内置 retry topic 或 dead letter topic（DLT）机制。这些是消费端的业务策略，由调用方在 handler 中实现：
+
+- **retry topic**：handler 捕获 `Retryable` 错误后，将消息重新投递到 delay queue topic
+- **DLT**：handler 重试耗尽后，将消息写入 dead letter topic 并 commit offset，避免卡住分区消费
+
+kafkax 在公开 API 中保留 headers 和 `Retryable` 错误标记，为上层实现 retry/DLT 策略提供基础。
+
+## Driver-Neutral 设计
+
+kafkax 公开 API 不暴露任何第三方 Kafka client 具体类型。生产驱动 `kafkago.Driver`（`pkg/kafkax/kafkago/driver.go`）基于 `segmentio/kafka-go` 实现 `kafkax.Producer`、`kafkax.ConsumerFactory` 和 `kafkax.Admin`，通过 `ClientOptions()` 返回 `kafkax.Option` 注入到 `kafkax.Client`：
+
+```go
+d, _ := kafkago.New(cfg)
+client, _ := kafkax.New(ctx, cfg, d.ClientOptions()...)
+```
+
+调用方只需依赖 `pkg/kafkax` 的公开接口。`Driver` 接口抽象定义在 `internal/driver/driver.go`（Capability/Descriptor），用于 driver 注册和自我描述。fake driver 位于 `testkit/`，无需真实 broker 即可锁定 API contract 行为。
+
+## 配置
+
+```go
+type ProducerConfig struct {
+    RequiredAcks    int           // 0 / 1 / -1
+    Compression     CompressionCodec
+    Idempotence     bool
+    MaxRetries      int
+    RetryBackoff    time.Duration
+    BatchSize       int
+    Linger          time.Duration
+    BufferMemory    int64
+    MaxInFlight     int
+    RequestTimeout  time.Duration
+    DeliveryTimeout time.Duration
+}
+
+type ConsumerConfig struct {
+    SessionTimeout    time.Duration
+    HeartbeatInterval time.Duration
+    MaxPollRecords    int
+    FetchMinBytes     int
+    FetchMaxBytes     int
+    FetchMaxWait      time.Duration
+    MaxRetries        int
+    RetryBackoff      time.Duration
+    IsolationLevel    IsolationLevel
+    AutoCommit        bool
+}
+
+type AdminConfig struct {
+    Timeout          time.Duration
+    MaxRetries       int
+    RetryBackoff     time.Duration
+    RequestTimeout   time.Duration
+}
+```
+
+完整配置支持 TLS、SASL 认证。`Config.Sanitize()` 返回脱敏副本，secret 字段替换为 `[REDACTED]`。
+
+## 健康检查
+
+```go
+func (c *Client) HealthCheck(ctx context.Context) HealthStatus
+```
+
+返回 `healthy` / `degraded` / `unhealthy` 三级状态，包含延迟和元数据。对上层 `observex` 的 health endpoint 集成友好。
+
+## Metrics
+
+kafkax 通过 `Metrics` 接口上报以下指标：
+
+| 类别 | 指标 |
+|---|---|
+| Client | `client_created_total`、`client_closed_total`、`client_errors_total`、`client_health_status`、`client_health_latency_ms`、`client_requests_total`、`client_request_duration_seconds`、`client_retries_total`、`client_inflight` |
+| Producer | `producer_messages_total`、`producer_errors_total`、`producer_latency_seconds` |
+| Consumer | `consumer_messages_total`、`consumer_errors_total`、`consumer_lag`、`consumer_commits_total` |
+| Admin | `admin_operations_total`、`admin_errors_total` |
+
+`Metrics` 接口与 `observex` 的 Prometheus bridge 兼容。测试场景使用 `NoopMetrics` 静默丢弃。
+
+## 错误模型
+
+```go
+type Error struct {
+    Kind      ErrorKind // config / validation / connection / unavailable / timeout / auth / conflict / rate_limit / produce / consume / commit / admin / driver / internal
+    Op        string
+    Message   string
+    Cause     error
+    Retryable bool
+}
+```
+
+每个错误都携带 `Kind` 分类和 `Retryable` 标记，上层可以根据错误类型执行不同的恢复策略（重试、换 broker、告警、放弃）。
 
 ## 非目标
 
-- 不依赖 `x.go`，也不把 `x.go` 作为基础库构建前提。
-- 不包含 `x.go` 业务模型、业务 repository、业务消息 schema 或应用 wiring。
+- 不依赖 `x.go`，也不把 `x.go` 作为构建前提。
+- 不包含业务 topic、业务消息 schema 或业务 repository。
 - 不隐式读取生产密钥，不把 `/home/k8s/secrets/env/*` 的内容写入源码、README、测试日志、manifest 或 PR 描述。
-- 不创建隐藏全局客户端、不可关闭后台进程或真实基础设施 runtime。
-- 不把旧 `kafkax` / `foundationx` 叙事继续作为主身份。
+- 不创建隐藏全局客户端、不可关闭后台进程。
+- 不在公开 API 中泄露第三方 Kafka client 具体类型。
 
-## 标准结构
+## 项目结构
 
-- `pkg/kafkax`：公共包 API 的可编译参考实现；渲染后会移动到 `pkg/<package-name>`。
-- `internal/`：脱敏、校验和运行时说明等内部辅助代码。
-- `testkit/`：可复用测试夹具和断言。
-- `examples/`：最小使用示例。
-- `contracts/`：JSON schema 和 metrics contract。
-- `docs/`：规格、设计、API、配置、测试、标准、迁移和发布文档。
-- `scripts/`：Harness gate 与 Evidence 脚本。
-- `.agent/`：Full Goal Runtime v3.1 工件、Evidence、评审、发布、回滚和复盘模板。
-- `release/manifest/`：release manifest 模板；`latest.json` 由 release gate 生成并作为 Evidence artifact 保存。
+- `pkg/kafkax`：公开 API（Producer、Consumer、Admin、Config、Message、Error、Metrics、HealthCheck）
+- `pkg/kafkax/kafkago/`：具体 driver 实现
+- `internal/`：内部辅助（validation、sanitize、driver 接口定义）
+- `testkit/`：可复用测试夹具、fake Kafka runtime、golden 断言
+- `contracts/`：JSON schema 和 metrics contract
+- `docs/`：规格、设计、API、配置、测试、发布文档
+- `scripts/`：gate 与 evidence 脚本
+- `.agent/`：Goal Runtime v3.1 工件、evidence、评审、发布、回滚和复盘模板
+- `release/manifest/`：release manifest 模板；`latest.json` 由 release gate 生成并作为 evidence artifact 保存
 
 ## 文档入口
 
-- [基础库标准索引](docs/standard/README.md)：P0 标准入口，覆盖仓库角色、分层、DoD、Harness、Evidence、release、安全和 generator 契约。
-- [基础库总标准](docs/standard/kafkax.md)：同步 [`kafkax`](https://github.com/ZoneCNH/kafkax) 的公共 API、配置、错误、健康检查、metrics、测试、安全和发布规则。
-- [仓库角色](docs/standard/repository-roles.md)：区分 `kafkax`、`kernel`、生成基础库和 `x.go`。
-- [模块边界](docs/standard/module-boundary.md)：定义标准、模板、generator、Harness、Evidence 与下游库边界。
-- [下游矩阵](docs/downstream-matrix.md)：列出 `kernel` 与所有目标库的 module path、package、layer、允许依赖和禁止依赖。
-- [下游同步策略](docs/downstream-sync-policy.md)：定义 `kafkax` 变更如何同步到 `kernel`、L1/L2 基础库，以及 `x.go` 的消费方边界。
-- [x.go 集成边界](docs/xgo-integration-boundary.md)：说明 `x.go` 只能作为调用方组合层，基础库不得反向依赖。
-- [迁移指南](docs/migration/kafkax-to-kafkax.md)：记录旧名到新身份的迁移规则。
-- [Harness gate](docs/standard/harness-gates.md)：required、extended、generator、docs、score 和 final gate 命令。
-- [Evidence 协议](docs/standard/evidence-protocol.md)：`DONE with evidence:` 和 release manifest 要求。
-- [测试策略](docs/testing.md)：单元、示例 smoke、release quality 和 release manifest fixture 隔离要求。
-- [安全与密钥策略](docs/standard/security-and-secret-policy.md)：secret scan、每周窗口 `govulncheck` 和 Agent runtime 目录排除边界。
-- [供应链与 Evidence](docs/supply-chain.md)：workflow Action SHA pinning、每周窗口 `govulncheck` 固定版本、release manifest 和 CI artifact 对齐。
-- [Release Scorecard](docs/scorecard.md)：`goalcli score --min 9.8` 的评分维度、阈值和语义边界。
-- [发布](docs/release.md)：`release-check`、manifest 字段和 Evidence 规则。
-- [独立审计 2026-06-02](docs/independent-audit-20260602.md)：独立审计发现、修复状态和剩余验证缺口。
-- [项目分析快照 2026-06-02](docs/project-analysis-20260602.md)：`v0.3.7` 发布/分析快照；当前治理主基线仍以 [目标文档](docs/goal/goal.md) v2.9.3 Complete 和 [.agent/traceability/traceability-matrix.md](.agent/traceability/traceability-matrix.md) 为准。
-- [结构性问题清单 2026-06-02](docs/structural-issues-20260602.md)：记录架构、治理和交付风险的结构化问题清单。
-- [项目结构分析报告 2026-06-05](docs/project-structural-analysis-20260605.md)：记录当前评分、结构性问题、已修复的安全门禁频率和后续治理建议。
-- [.agent 真相状态文件](.agent/evidence/truth-state.yaml)：汇总当前治理、命令实现、release gate、Evidence 可用性和下游采纳状态口径。
+- [Goal 执行计划](docs/goal/goal.md)：kafkax L2 标准工厂完整执行计划
+- [仓库角色](docs/standard/repository-roles.md)：区分 `xlib-standard`、`kernel`、L1/L2 基础库和 `x.go`
+- [模块边界](docs/standard/module-boundary.md)：定义标准、模板、generator、harness、evidence 与下游库边界
+- [下游矩阵](docs/downstream-matrix.md)：列出 `kernel` 与所有目标库的 module path、package、layer、允许依赖和禁止依赖
+- [下游同步策略](docs/downstream-sync-policy.md)：定义上游变更如何同步到 `kernel`、L1/L2 基础库
+- [x.go 集成边界](docs/xgo-integration-boundary.md)：说明 `x.go` 只能作为调用方组合层，基础库不得反向依赖
+- [Harness gate](docs/standard/harness-gates.md)：required、extended、generator、docs、score 和 final gate 命令
+- [Evidence 协议](docs/standard/evidence-protocol.md)：`DONE with evidence:` 和 release manifest 要求
+- [测试策略](docs/testing.md)：单元、示例 smoke、release quality 和 release manifest fixture 隔离要求
+- [安全与密钥策略](docs/standard/security-and-secret-policy.md)：secret scan、`govulncheck` 和 agent runtime 目录排除边界
+- [供应链与 Evidence](docs/supply-chain.md)：workflow action SHA pinning、`govulncheck` 固定版本、release manifest 和 CI artifact 对齐
+- [发布](docs/release.md)：`release-check`、manifest 字段和 evidence 规则
+- [Driver ADR](docs/adr/)：Kafka driver 实现选型决策记录
 
 ## 命令
 
-本地运行完整 gate 前默认需要安装 `golangci-lint`；`make security` 默认只运行 secret scan，不访问漏洞库。只有 `XLIB_ENABLE_VULNCHECK=1` 且一周窗口到期、状态缺失，或 `XLIB_FORCE_VULNCHECK=1` 时才执行 `govulncheck ./...`。状态文件默认 `.cache/security/govulncheck-last-run`，可用 `XLIB_VULNCHECK_INTERVAL_HOURS` / `XLIB_VULNCHECK_STATE` 调整。缺少默认必需工具，或漏洞扫描到期/强制执行时缺少 `govulncheck`，相关 gate 必须失败，不允许把必需 gate 记录为跳过。
+本地运行完整 gate 前默认需要安装 `golangci-lint`；`make security` 默认只运行 secret scan，不访问漏洞库。只有 `XLIB_ENABLE_VULNCHECK=1` 且一周窗口到期、状态缺失，或 `XLIB_FORCE_VULNCHECK=1` 时才执行 `govulncheck ./...`。缺少默认必需工具，或漏洞扫描到期/强制执行时缺少 `govulncheck`，相关 gate 必须失败。
 
 ### 首次 clone 必跑
 
-新协作者 clone 仓库后必须立即执行：
-
 ```bash
-make install-hooks   # 启用 .githooks 本地 P0 防线（RULE-WORKTREE-001 + RULE-SECRET-001）
+make install-hooks   # 启用 .githooks 本地 P0 防线
 make doctor-hooks    # 验证 core.hooksPath=.githooks 已生效
-make sync-main       # 拉取并 fast-forward 本地 main（RULE-MAIN-SYNC-002）
+make sync-main       # 拉取并 fast-forward 本地 main
 ```
-
-`make install-hooks` 把 `git config core.hooksPath` 指向仓库内的 `.githooks/` 目录。**未启用 hooks 时，`pre-commit` 与 `pre-push` 不会被 Git 调用，本地 P0 防线（禁止在 main commit、secret 提前拦截）形同虚设。** 此外，`go run ./cmd/goalcli doctor` 会在 details 中报告当前 hooks 启用状态，配合 `make doctor-hooks` 形成自检闭环。`make ci` 链首位的 `doctor-hooks-local` 也会在本地环境强制 fail-fast（CI 环境通过 `$CI` / `$GITHUB_ACTIONS` 自动跳过）。
 
 ### 标准 gate
 
@@ -83,51 +306,23 @@ GOWORK=off make standard-impact-check
 GOWORK=off make docs-check
 XLIB_CONTEXT=release_verify GOWORK=off make release-check
 XLIB_CONTEXT=release_verify GOWORK=off make release-final-check
-XLIB_CONTEXT=release_verify GOWORK=off make release-preflight VERSION=v0.4.13
 make evidence
 ```
 
-`release-check` 和 `release-check-extended` 已依赖 `dependency-check`、`standard-impact-check` 和 `docs-check`，用于在生成 Evidence 前确认依赖漂移自动化、标准影响报告、标准文档入口、下游同步策略、链接、模板占位符、当前命名、关键文本和 release manifest 协议没有漂移。`dependency-check` 读取 `renovate.json`、`.github/dependabot.yml` 和 `go.mod`；`standard-impact-check` 生成 `release/standard-impact/latest.md`，并把 `downstream_sync_required`、`downstream_release_decision`（只允许 `required` / `not_required`）和 `repository_rules_release_decision`（只允许 `audit_required` / `not_required`）结论交给 release manifest。`docs-check` 是结构性 gate，不替代人工语义审查。
+`release-check` 依赖 `dependency-check`、`standard-impact-check` 和 `docs-check`，用于在生成 evidence 前确认依赖漂移自动化、标准影响报告、文档入口、下游同步策略、链接、模板占位符、当前命名、关键文本和 release manifest 协议没有漂移。
 
-Release gate 还必须执行 `GOWORK=off go run ./cmd/goalcli score --min 9.8`。GitHub Actions workflow 引用的第三方 Action 必须固定为 40 位 commit SHA 并保留来源 tag 注释；CI、Release Check、Auto Patch 和 Docker Contract workflow 默认设置 `XLIB_ENABLE_VULNCHECK=0`，Security workflow 每周一 03:17 UTC 定时强制执行漏洞扫描；启用或定时扫描时必须使用固定基线 `golang.org/x/vuln/cmd/govulncheck@v1.1.4`，不得用 `@latest` 作为发布门禁配置。
-
-生成 `kernel` 示例：
-
-```bash
-scripts/render_template.sh \
-  --module-name kernel \
-  --module-path github.com/ZoneCNH/kernel \
-  --package-name kernel \
-  --out ../kernel
-```
-
-发布式验证必须使用 `GOWORK=off`，避免父级或本地 `go.work` 改写 module 解析并掩盖模板独立性问题：
-
-```bash
-GOWORK=off make docs-check
-XLIB_CONTEXT=release_verify GOWORK=off make release-check
-```
+Release gate 执行 `GOWORK=off go run ./cmd/goalcli score --min 9.8`。所有发布、验证命令默认使用 `GOWORK=off`，避免父级或本地 `go.work` 改写 module 解析。
 
 ## Evidence
 
-完成需要 release manifest 和 CI Evidence。`release/manifest/latest.json` 是生成产物，不提交到源码历史；对应的 `release/manifest/latest.json.sha256` 也是生成产物，两者都必须保持在 `.gitignore` 中。manifest 会记录 module、commit、tree SHA、源码摘要、contract 指纹、`dependencies`、`tools`、生成时间、工作区状态、gate 结果、`standard_impact`、`downstream_sync_required`、`generator_evidence`、`score`、`workflow` 和这两个 Evidence artifact；其中 `standard_impact.downstream_release_decision` 只能使用 `required` 或 `not_required`，`standard_impact.repository_rules_release_decision` 只能使用 `audit_required` 或 `not_required`。`release-check` 会生成并校验 checksum，CI 会上传两者作为 artifact。`make release-evidence-check` 会验证 manifest 与当前仓库事实一致，`make release-final-check` 会额外要求工作区为 `clean`。Release manifest 测试必须在临时 fixture 仓库中构造所需 `.omc` state，不得依赖当前工作区的 Agent 运行态文件。最终完成声明必须包含 `DONE with evidence:`。
+完成需要 release manifest 和 CI evidence。`release/manifest/latest.json` 是生成产物，不提交到源码历史；对应的 `release/manifest/latest.json.sha256` 也是生成产物，两者都必须保持在 `.gitignore` 中。
 
-Full Goal Runtime v3.1 位于 [.agent](.agent/)，其中 [goal-runtime](.agent/runtime/goal-runtime.md)、[object-model](.agent/runtime/object-model.md)、[state-machine](.agent/runtime/state-machine.md)、[traceability-matrix](.agent/traceability/traceability-matrix.md)、[harness](.agent/harness/harness.yaml)、[evidence-protocol](.agent/evidence/evidence-protocol.md)、[release-template](.agent/release/release-template.md)、[retrospective-template](.agent/docs/retrospective-template.md)、[risk-register](.agent/traceability/risk-register.md)、[decision-log](.agent/traceability/decision-log.md)、[rollback-protocol](.agent/runtime/rollback-protocol.md) 和 patch 文档用于把标准、执行、评审、发布和复盘连接到同一套 Evidence 协议。
+最终完成声明必须包含 `DONE with evidence:`。
+
+Full Goal Runtime v3.1 位于 [.agent](.agent/)。
 
 ## Smoke 覆盖
 
-`go test ./...` 必须覆盖公共包、`internal/`、`contracts/`、`testkit/` 和 `examples/`。当前示例 smoke 测试会验证 `examples/basic` 输出模块名、`examples/config` 输出脱敏值、`examples/health` 输出健康状态，防止文档示例和模板行为漂移。
+`go test ./...` 覆盖公开包、`internal/`、`contracts/`、`testkit/`。fake Kafka fixture 锁定 producer/consumer/admin contract 行为，不依赖真实 broker。
 
-`scripts/run_fuzz_smoke.sh` 默认执行快速 fuzz smoke，`FUZZ_SMOKE_TIME` 未设置时每个 fuzz target 使用 `10s`。需要深度 fuzz 时显式设置更长时间，例如 `FUZZ_SMOKE_TIME=2m make fuzz-smoke`，并在最终 Evidence/DONE 说明中记录该时间配置。
-
-## Docker Toolchain Runtime
-
-[Docker Toolchain Runtime](docs/standard/docker-toolchain-standard.md) 是工具链运行时，不是第二套 gate。它定义 `.dockerignore` / `.git` build context 边界、BuildKit/cache/volume、环境变量 pass-through（`XLIB_CONTEXT`、`GOWORK`、`VERSION`、`DOWNSTREAM`、`XLIB_ENABLE_VULNCHECK`）和下游模板继承规则。
-
-```bash
-GOWORK=off make docker-toolchain-check
-GOWORK=off make docker-ci
-XLIB_CONTEXT=release_verify GOWORK=off make docker-release-check
-```
-
-`docker-ci` 只在容器运行时中调用既有 `make ci`；`docker-release-check` 只在容器运行时中调用既有 `make release-check`。发布、Harness、CI 和 downstream verification 仍必须使用 `GOWORK=off`。
+Broker-backed integration 只能由独立 extended gate 证明，不能由 fake driver 代替。
