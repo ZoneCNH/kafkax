@@ -14,7 +14,7 @@
 
 > 基于 ZoneCNH/ZoneCNH#340 来自 kafkax README 修复 session 的复盘规则。本仓库是 Go 源码仓库，规则在此落地。
 
-- **编辑前先 `git log --oneline -5` 确认目标文件最近提交**——禁止假设文件仍是自己记忆中的状态。
+- **编辑前先 `git log --oneline -5`，然后 `Read` 确认目标文件当前内容**——禁止假设文件仍是自己记忆中的状态。
 - **对任何 README 或文档中的代码事实声称，用 `grep` 或 `head` 对照源码验证后再提交。** 典型场景：声称"Config 有 X 字段"→ `grep "type ProducerConfig" pkg/kafkax/config.go`；声称"handler panic 被捕获"→ `grep "recover" pkg/kafkax/kafkago/consumer.go`；声称"文档有内容"→ `head docs/api.md`。
 - **先列验证清单，再列变更清单**——先确定需要 grep 什么，验证完再按变更清单编辑。
 - **校验命令不计入成本控制**——`grep`/`head`/`git log` 调用成本可忽略，但不执行导致的返工成本极高（本 session：跳过数次 grep → $49.52 无效编辑）。
