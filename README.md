@@ -31,7 +31,7 @@ type Producer interface {
 ```
 
 - 支持单条发送 `Send` 和批量发送 `SendBatch`
-- `Flush` 显式刷新内部缓冲区，确保消息已提交到 broker
+- `Flush` 显式刷新 producer 内部缓冲区，确保缓冲消息已发送
 - 通过 `ProduceOption` 注入 per-message headers
 
 ### Consumer
@@ -47,7 +47,7 @@ type Consumer interface {
 }
 ```
 
-- `Run` 驱动 consumer loop，将每条 record 分发给 `Handler`，支持 rebalance 回调
+- `Run` 驱动 consumer loop，每条 record 交给 `Handler` 处理；driver 内部处理 rebalance（partition revoke/assign）
 - `Poll` 提供手动拉取模式，调用方自行控制拉取节奏
 - `Commit` 显式提交 offset
 - `Pause` / `Resume` 控制分区消费流控
@@ -80,22 +80,9 @@ type Message struct {
     Partition Partition
     Offset    Offset
 }
-
-type Config struct {
-    Name          string
-    Timeout       time.Duration
-    Brokers       []string
-    ClientID      string
-    Security      SecurityConfig
-    Producer      ProducerConfig
-    Consumer      ConsumerConfig
-    Admin         AdminConfig
-    Retry         RetryConfig
-    Observability ObservabilityConfig
-}
 ```
 
-全部公开类型提供不可变 `Clone()` 方法。所有读操作返回副本，不暴露内部引用。
+Message、Record、RecordBatch、Subscription、TopicSpec、TopicDescription、TopicPlan、TopicApplyResult、BatchProduceResult 均提供不可变 `Clone()` 方法。完整 Config 结构体见[配置](#配置)章节。
 
 ## Kafka 语义
 
@@ -109,7 +96,7 @@ Producer 通过 `ProducerConfig.RequiredAcks` 控制确认策略：
 | 1 | 等待 leader 确认 | leader 故障时可能丢失 |
 | -1 (all) | 等待所有 ISR 确认 | 最高持久性保证 |
 
-默认推荐 `RequiredAcks = -1`（all），搭配 `MinInSyncReplicas >= 2` 使用。
+默认推荐 `RequiredAcks = -1`（all），搭配 topic 侧 `TopicSpec.MinInSyncReplicas >= 2` 使用。
 
 ### 投递保证
 
@@ -122,21 +109,18 @@ kafkax 不宣称 exactly-once。投递保证取决于 handler 与 offset commit 
 
 ### Consumer Group Rebalance
 
-Consumer group rebalance 是正常运维事件，不是异常。kafkax 的 `Consumer.Run` 在 rebalance 时执行：
+Consumer group rebalance 是正常运维事件，不是异常。rebalance 时 producer 应 flush，consumer 应尽快完成当前批处理并 commit offset，避免 rebalance 超时导致重复消费。
 
-1. **partition revoked**：停止当前分区消费，刷新内部缓冲区
-2. **partition assigned**：从最后提交的 offset 恢复消费
-
-Handler 必须在 revoke 信号到达后尽快返回，避免 rebalance 超时导致重复消费。
+kafkax 公开 API 不暴露 rebalance 回调。底层 driver（如 `segmentio/kafka-go` Reader）在 rebalance 时内部处理 partition 分配和 offset 恢复，上层 handler 只需保证每条 record 处理是幂等的。
 
 ### Offset Commit 时机
 
-- `Consumer.Run` 模式（自动提交）：每条 record 处理成功后自动 commit。handler 返回 error 时跳过 commit，record 将在下次 poll 重新投递。
-- `Consumer.Poll` 模式（手动提交）：调用方通过 `Commit` 显式提交 offset，自行决定提交粒度。
+- `Consumer.Run` 模式：每轮 Poll→Handle→Commit。handler 返回 error 时 `Run` 退出，未 commit 的 record 在 consumer 重启后从上次提交位置重新投递。
+- `Consumer.Poll` 模式（手动提交）：调用方自行控制 Poll 和 Commit 的节奏与粒度。
 
 ### Handler Panic 行为
 
-Consumer handler 中发生的 panic 被 kafkax 捕获并转换为 `ErrorKindConsume` 错误。panic 不会导致 consumer 进程退出，但该条 record 不会被 commit。捕获 panic 后 consumer loop 继续运行，panic 记录通过 `Metrics` 上报。
+`Consumer.Run` 不捕获 handler panic。handler 中发生的 panic 会传播到调用方 goroutine。调用方应在 handler 内部自行 recover，或在外层 goroutine 中设置 recover 保护。
 
 ### 重试
 
@@ -171,47 +155,80 @@ d, _ := kafkago.New(cfg)
 client, _ := kafkax.New(ctx, cfg, d.ClientOptions()...)
 ```
 
-调用方只需依赖 `pkg/kafkax` 的公开接口。`Driver` 接口抽象定义在 `internal/driver/driver.go`（Capability/Descriptor），用于 driver 注册和自我描述。fake driver 位于 `testkit/`，无需真实 broker 即可锁定 API contract 行为。
+调用方只需依赖 `pkg/kafkax` 的公开接口。`Driver` 接口抽象定义在 `internal/driver/driver.go`（Capability/Descriptor），用于 driver 注册和自我描述。
+
+### Fake Driver（testkit）
+
+`testkit/kafka.go` 提供无 broker、无第三方依赖的 fake Kafka runtime，用于锁定 API contract 行为：
+
+```go
+// 完整 fake —— 同一 KafkaFake 内的 producer/consumer/admin 共享状态
+fk := testkit.FakeKafka()
+producer, _ := fk.Producer(ctx)
+consumer, _ := fk.Consumer(ctx)
+admin, _    := fk.Admin(ctx)
+
+// 快捷独立 fake
+producer, _ := testkit.FakeProducer(ctx)
+consumer, _ := testkit.FakeConsumer(ctx)
+admin, _    := testkit.FakeAdmin(ctx)
+
+// Golden 测试数据
+msg := testkit.GoldenRecord("my-topic")
+```
+
+`KafkaFake` 内部维护 record store 和 topic registry，fake producer 写入后 fake consumer 可 poll 到相同 record，支持 round-trip 验证。fake consumer 支持 Pause/Resume 流控，fake admin 支持 PlanTopics（diff）和 ApplyTopics（CRUD）。`GoldenRecord` 提供稳定的测试数据。
+
+Broker-backed integration 只能由独立 extended gate 证明，不能由 fake driver 代替。
 
 ## 配置
 
 ```go
+type Config struct {
+    Name          string
+    Timeout       time.Duration
+    Secret        string
+    Brokers       []string
+    ClientID      string
+    Security      SecurityConfig
+    Producer      ProducerConfig
+    Consumer      ConsumerConfig
+    Admin         AdminConfig
+    Retry         RetryConfig
+    Observability ObservabilityConfig
+}
+
+type SecurityConfig struct {
+    Protocol SecurityProtocol // plaintext / tls / sasl
+    Username string
+    Password string
+    Token    string
+}
+
 type ProducerConfig struct {
-    RequiredAcks    int           // 0 / 1 / -1
-    Compression     CompressionCodec
-    Idempotence     bool
-    MaxRetries      int
-    RetryBackoff    time.Duration
-    BatchSize       int
-    Linger          time.Duration
-    BufferMemory    int64
-    MaxInFlight     int
-    RequestTimeout  time.Duration
-    DeliveryTimeout time.Duration
+    RequiredAcks int  // 0 / 1 / -1
+    Idempotent   bool
+    BatchBytes   int
 }
 
 type ConsumerConfig struct {
-    SessionTimeout    time.Duration
-    HeartbeatInterval time.Duration
-    MaxPollRecords    int
-    FetchMinBytes     int
-    FetchMaxBytes     int
-    FetchMaxWait      time.Duration
-    MaxRetries        int
-    RetryBackoff      time.Duration
-    IsolationLevel    IsolationLevel
-    AutoCommit        bool
+    GroupID        string
+    SessionTimeout time.Duration
+    StartOffset    OffsetResetPolicy // earliest / latest / none
 }
 
 type AdminConfig struct {
-    Timeout          time.Duration
-    MaxRetries       int
-    RetryBackoff     time.Duration
-    RequestTimeout   time.Duration
+    Timeout time.Duration
+    DryRun  bool
+}
+
+type RetryConfig struct {
+    MaxAttempts int
+    Backoff     time.Duration
 }
 ```
 
-完整配置支持 TLS、SASL 认证。`Config.Sanitize()` 返回脱敏副本，secret 字段替换为 `[REDACTED]`。
+`Config.Sanitize()` 返回脱敏副本，Password/Token 字段替换为 `[REDACTED]`。`Config.Validate()` 校验 Name 非空、数值字段非负。
 
 ## 健康检查
 
@@ -219,7 +236,7 @@ type AdminConfig struct {
 func (c *Client) HealthCheck(ctx context.Context) HealthStatus
 ```
 
-返回 `healthy` / `degraded` / `unhealthy` 三级状态，包含延迟和元数据。对上层 `observex` 的 health endpoint 集成友好。
+返回 `healthy` / `degraded` / `unhealthy` 三级状态，包含延迟（`LatencyMs`）和诊断元数据。
 
 ## Metrics
 
@@ -232,7 +249,7 @@ kafkax 通过 `Metrics` 接口上报以下指标：
 | Consumer | `consumer_messages_total`、`consumer_errors_total`、`consumer_lag`、`consumer_commits_total` |
 | Admin | `admin_operations_total`、`admin_errors_total` |
 
-`Metrics` 接口与 `observex` 的 Prometheus bridge 兼容。测试场景使用 `NoopMetrics` 静默丢弃。
+测试场景使用 `NoopMetrics` 静默丢弃。生产环境由调用方注入实现（如 `observex` 适配）。
 
 ## 错误模型
 
@@ -252,77 +269,46 @@ type Error struct {
 
 - 不依赖 `x.go`，也不把 `x.go` 作为构建前提。
 - 不包含业务 topic、业务消息 schema 或业务 repository。
-- 不隐式读取生产密钥，不把 `/home/k8s/secrets/env/*` 的内容写入源码、README、测试日志、manifest 或 PR 描述。
+- 不隐式读取生产密钥；生产凭证通过 `Config.Security` 显式注入，不在源码、日志或 artifact 中泄露。
 - 不创建隐藏全局客户端、不可关闭后台进程。
 - 不在公开 API 中泄露第三方 Kafka client 具体类型。
 
 ## 项目结构
 
 - `pkg/kafkax`：公开 API（Producer、Consumer、Admin、Config、Message、Error、Metrics、HealthCheck）
-- `pkg/kafkax/kafkago/`：具体 driver 实现
-- `internal/`：内部辅助（validation、sanitize、driver 接口定义）
-- `testkit/`：可复用测试夹具、fake Kafka runtime、golden 断言
+- `pkg/kafkax/kafkago/`：`segmentio/kafka-go` 生产驱动（`kafkago.Driver`、producer、consumer、admin）
+- `internal/`：内部辅助（validation、sanitize、driver 接口抽象、release quality scoring、goal runtime）
+- `testkit/`：可复用测试夹具、`KafkaFake` fake runtime、golden 断言
 - `contracts/`：JSON schema 和 metrics contract
-- `docs/`：规格、设计、API、配置、测试、发布文档
-- `scripts/`：gate 与 evidence 脚本
-- `.agent/`：Goal Runtime v3.1 工件、evidence、评审、发布、回滚和复盘模板
-- `release/manifest/`：release manifest 模板；`latest.json` 由 release gate 生成并作为 evidence artifact 保存
+- `docs/`：API、配置、测试、goal 执行计划、ADR 等文档
+- `scripts/`：CI gate 与 evidence 脚本
+- `cmd/goalcli/`：goal 治理 CLI（score、schema check、traceability、audit）
+- `.agent/`：治理自动化配置（harness、rules、policies、traceability matrix）
+- `release/`：release manifest、standard impact 报告、evidence artifact
 
 ## 文档入口
 
 - [Goal 执行计划](docs/goal/goal.md)：kafkax L2 标准工厂完整执行计划
-- [仓库角色](docs/standard/repository-roles.md)：区分 `xlib-standard`、`kernel`、L1/L2 基础库和 `x.go`
-- [模块边界](docs/standard/module-boundary.md)：定义标准、模板、generator、harness、evidence 与下游库边界
-- [下游矩阵](docs/downstream-matrix.md)：列出 `kernel` 与所有目标库的 module path、package、layer、允许依赖和禁止依赖
-- [下游同步策略](docs/downstream-sync-policy.md)：定义上游变更如何同步到 `kernel`、L1/L2 基础库
-- [x.go 集成边界](docs/xgo-integration-boundary.md)：说明 `x.go` 只能作为调用方组合层，基础库不得反向依赖
-- [Harness gate](docs/standard/harness-gates.md)：required、extended、generator、docs、score 和 final gate 命令
-- [Evidence 协议](docs/standard/evidence-protocol.md)：`DONE with evidence:` 和 release manifest 要求
-- [测试策略](docs/testing.md)：单元、示例 smoke、release quality 和 release manifest fixture 隔离要求
-- [安全与密钥策略](docs/standard/security-and-secret-policy.md)：secret scan、`govulncheck` 和 agent runtime 目录排除边界
-- [供应链与 Evidence](docs/supply-chain.md)：workflow action SHA pinning、`govulncheck` 固定版本、release manifest 和 CI artifact 对齐
-- [发布](docs/release.md)：`release-check`、manifest 字段和 evidence 规则
+- [API 文档](docs/api.md)：公开 API 接口与使用说明
+- [配置文档](docs/config.md)：Config 字段、TLS/SASL 认证、脱敏规则
+- [错误文档](docs/errors.md)：ErrorKind 分类、Retryable 标记、恢复策略
+- [Metrics 文档](docs/metrics.md)：指标定义与 observex 集成
+- [测试策略](docs/testing.md)：单元测试、contract test、fake driver 覆盖
 - [Driver ADR](docs/adr/)：Kafka driver 实现选型决策记录
+- [发布](docs/release.md)：release gate 流程与 manifest 规范
 
 ## 命令
 
-本地运行完整 gate 前默认需要安装 `golangci-lint`；`make security` 默认只运行 secret scan，不访问漏洞库。只有 `XLIB_ENABLE_VULNCHECK=1` 且一周窗口到期、状态缺失，或 `XLIB_FORCE_VULNCHECK=1` 时才执行 `govulncheck ./...`。缺少默认必需工具，或漏洞扫描到期/强制执行时缺少 `govulncheck`，相关 gate 必须失败。
-
-### 首次 clone 必跑
-
 ```bash
-make install-hooks   # 启用 .githooks 本地 P0 防线
-make doctor-hooks    # 验证 core.hooksPath=.githooks 已生效
-make sync-main       # 拉取并 fast-forward 本地 main
+make ci          # 标准 gate（lint、test、contracts、boundary）
+make ci-extended # 扩展 gate（含 extended test suite）
+make evidence    # 生成 release evidence
 ```
 
-### 标准 gate
+完整 gate 链和 release 流程见 [Makefile](Makefile) 与 [docs/release.md](docs/release.md)。
 
-```bash
-make ci
-make ci-extended
-GOWORK=off make dependency-check
-GOWORK=off make standard-impact-check
-GOWORK=off make docs-check
-XLIB_CONTEXT=release_verify GOWORK=off make release-check
-XLIB_CONTEXT=release_verify GOWORK=off make release-final-check
-make evidence
-```
+## 测试
 
-`release-check` 依赖 `dependency-check`、`standard-impact-check` 和 `docs-check`，用于在生成 evidence 前确认依赖漂移自动化、标准影响报告、文档入口、下游同步策略、链接、模板占位符、当前命名、关键文本和 release manifest 协议没有漂移。
-
-Release gate 执行 `GOWORK=off go run ./cmd/goalcli score --min 9.8`。所有发布、验证命令默认使用 `GOWORK=off`，避免父级或本地 `go.work` 改写 module 解析。
-
-## Evidence
-
-完成需要 release manifest 和 CI evidence。`release/manifest/latest.json` 是生成产物，不提交到源码历史；对应的 `release/manifest/latest.json.sha256` 也是生成产物，两者都必须保持在 `.gitignore` 中。
-
-最终完成声明必须包含 `DONE with evidence:`。
-
-Full Goal Runtime v3.1 位于 [.agent](.agent/)。
-
-## Smoke 覆盖
-
-`go test ./...` 覆盖公开包、`internal/`、`contracts/`、`testkit/`。fake Kafka fixture 锁定 producer/consumer/admin contract 行为，不依赖真实 broker。
+`go test ./...` 覆盖公开包、`internal/`、`contracts/`、`testkit/`。fake Kafka fixture（`testkit.KafkaFake`）锁定 producer/consumer/admin contract 行为，不依赖真实 broker。
 
 Broker-backed integration 只能由独立 extended gate 证明，不能由 fake driver 代替。
