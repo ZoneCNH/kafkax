@@ -15,7 +15,7 @@ L2 适配： kafkax ← 本仓库
 L3 应用： x.go（编排层，仅消费 L2 API）
 ```
 
-kafkax 作为 L2 适配层，只表达 Kafka 基础设施语义，不表达业务语义。禁止依赖 `x.go` 或任何业务 topic/schema。完整执行计划见 [docs/goal/goal.md](docs/goal/goal.md)。
+kafkax 作为 L2 适配层，只表达 Kafka 基础设施语义，不表达业务语义。禁止依赖 `x.go` 或任何业务 topic/schema。L2 adapter 规范见 [docs/standard/l2-kafka-adapter.md](docs/standard/l2-kafka-adapter.md)，完整执行计划见 [docs/goal/goal.md](docs/goal/goal.md)。
 
 ## API 概览
 
