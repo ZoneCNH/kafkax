@@ -6,6 +6,12 @@ kafkax 遵循 xlib-standard 的治理协议，但不是标准源、不是 genera
 
 仓库地址：[`kafkax`](https://github.com/ZoneCNH/kafkax)。module path：`github.com/ZoneCNH/kafkax`。
 
+本文是 API 参考与语义说明——覆盖 Producer/Consumer/Admin 接口、配置、Kafka 语义和错误模型。
+
+- 权威规范：[docs/standard/l2-kafka-adapter.md](docs/standard/l2-kafka-adapter.md)（contract、边界、合规要求）
+- 执行计划与证据：[docs/goal/goal.md](docs/goal/goal.md)（REQ-001..REQ-015 完成度追踪）
+- 设计决策：[docs/adr/](docs/adr/)（driver 选型等关键决策记录）
+
 ## 架构定位
 
 ```text
@@ -15,7 +21,7 @@ L2 适配： kafkax ← 本仓库
 L3 应用： x.go（编排层，仅消费 L2 API）
 ```
 
-kafkax 作为 L2 适配层，只表达 Kafka 基础设施语义，不表达业务语义。禁止依赖 `x.go` 或任何业务 topic/schema。L2 adapter 规范见 [docs/standard/l2-kafka-adapter.md](docs/standard/l2-kafka-adapter.md)，完整执行计划见 [docs/goal/goal.md](docs/goal/goal.md)。
+kafkax 作为 L2 适配层，只表达 Kafka 基础设施语义，不表达业务语义。禁止依赖 `x.go` 或任何业务 topic/schema。
 
 ## API 概览
 
@@ -155,7 +161,7 @@ d, _ := kafkago.New(cfg)
 client, _ := kafkax.New(ctx, cfg, d.ClientOptions()...)
 ```
 
-调用方只需依赖 `pkg/kafkax` 的公开接口。`Driver` 接口抽象定义在 `internal/driver/driver.go`（Capability/Descriptor），用于 driver 注册和自我描述。driver 选型决策记录见 [docs/adr/](docs/adr/)。
+调用方只需依赖 `pkg/kafkax` 的公开接口。`Driver` 接口抽象定义在 `internal/driver/driver.go`（Capability/Descriptor），用于 driver 注册和自我描述。
 
 ### Fake Driver（testkit）
 
