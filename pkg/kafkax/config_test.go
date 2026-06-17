@@ -34,3 +34,23 @@ func TestConfigSanitizeMasksSecret(t *testing.T) {
 		t.Fatalf("expected name to be preserved, got %q", sanitized.Name)
 	}
 }
+
+func TestConfigValidateRejectsNegativeHeartbeatInterval(t *testing.T) {
+	err := Config{Name: "kafkax", Consumer: ConsumerConfig{HeartbeatInterval: -time.Second}}.Validate()
+	if err == nil {
+		t.Fatal("expected negative heartbeat interval to fail validation")
+	}
+	if !IsKind(err, ErrorKindValidation) {
+		t.Fatalf("expected validation error, got %T %[1]v", err)
+	}
+}
+
+func TestConfigValidateRejectsNegativeMaxPollRecords(t *testing.T) {
+	err := Config{Name: "kafkax", Consumer: ConsumerConfig{MaxPollRecords: -1}}.Validate()
+	if err == nil {
+		t.Fatal("expected negative max poll records to fail validation")
+	}
+	if !IsKind(err, ErrorKindValidation) {
+		t.Fatalf("expected validation error, got %T %[1]v", err)
+	}
+}
