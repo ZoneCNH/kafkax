@@ -1,5 +1,7 @@
 # kafkax
 
+Release version: v0.4.13
+
 `kafkax` 是 FoundationX 的 **L2 Kafka adapter 基础库**，为 FoundationX 量化交易系统提供 driver-neutral 的 Kafka 生产、消费和集群管理能力。
 
 kafkax 遵循 xlib-standard 的治理协议，但不是标准源、不是 generator、不是模板仓库。
@@ -218,9 +220,11 @@ type ProducerConfig struct {
 }
 
 type ConsumerConfig struct {
-    GroupID        string
-    SessionTimeout time.Duration
-    StartOffset    OffsetResetPolicy // earliest / latest / none
+	GroupID           string
+	SessionTimeout    time.Duration
+	HeartbeatInterval time.Duration
+	MaxPollRecords    int
+	StartOffset       OffsetResetPolicy // earliest / latest / none
 }
 
 type AdminConfig struct {
