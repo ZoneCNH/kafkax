@@ -52,6 +52,14 @@ func (c Config) Validate() error {
 		err := errors.New("consumer session timeout must not be negative")
 		return validationError("Config.Validate", err.Error(), err)
 	}
+	if c.Consumer.HeartbeatInterval < 0 {
+		err := errors.New("consumer heartbeat interval must not be negative")
+		return validationError("Config.Validate", err.Error(), err)
+	}
+	if c.Consumer.MaxPollRecords < 0 {
+		err := errors.New("consumer max poll records must not be negative")
+		return validationError("Config.Validate", err.Error(), err)
+	}
 	if c.Admin.Timeout < 0 {
 		err := errors.New("admin timeout must not be negative")
 		return validationError("Config.Validate", err.Error(), err)
@@ -111,9 +119,11 @@ type ProducerConfig struct {
 }
 
 type ConsumerConfig struct {
-	GroupID        string
-	SessionTimeout time.Duration
-	StartOffset    OffsetResetPolicy
+	GroupID           string
+	SessionTimeout    time.Duration
+	HeartbeatInterval time.Duration
+	MaxPollRecords    int
+	StartOffset       OffsetResetPolicy
 }
 
 type AdminConfig struct {
