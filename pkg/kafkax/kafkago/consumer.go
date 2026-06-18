@@ -33,6 +33,12 @@ func newConsumer(d *Driver, sub kafkax.Subscription) *consumer {
 	if d.cfg.Consumer.SessionTimeout > 0 {
 		cfg.SessionTimeout = d.cfg.Consumer.SessionTimeout
 	}
+	if d.cfg.Consumer.HeartbeatInterval > 0 {
+		cfg.HeartbeatInterval = d.cfg.Consumer.HeartbeatInterval
+	}
+	// MaxPollRecords: segmentio/kafka-go Reader 按 ReadMessage 单条消费，
+	// 无原生 per-poll 记录上限；该字段在 Config.Validate 校验，
+	// 实际批次粒度由调用方在 Poll 循环中控制。
 	if len(sub.Topics) == 1 {
 		cfg.Topic = sub.Topics[0]
 	} else {

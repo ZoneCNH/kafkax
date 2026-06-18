@@ -2,6 +2,22 @@
 
 ## 未发布
 
+## v1.1.0 - 2026-06-19
+
+### 新增
+
+- `ConsumerConfig` 暴露 `HeartbeatInterval`、`MaxPollRecords` 字段并加入合法性校验（负值返回配置错误）。
+- 将 CI、Release Check、Integration、Security、Docker Contract、Auto Patch、Goal Gates 与 Worktree Guard 全部 workflow 路由到 SRE 机器池（`sre/storage-heavy` / `sre/deploy`），禁止回退 GitHub-hosted runner。
+
+### 治理
+
+- 版本号与 GitHub release `v1.0.x` 线对齐：内部 `Version` 元数据从 `v0.4.13` 提升到 `v1.1.0`，统一 `version.go` / `governance.go` / `releasemanifest` / `README` / `AGENTS` / manifest template / harness / docs。
+- 同步 `module/kafkax` 的 `FEATURES.md` / `ACCEPTANCE.md` 运行时验收证据。
+
+### 兼容性
+
+- `ConsumerConfig` 新增可配置字段为向后兼容的 minor 增强；不改变 `pkg/kafkax` 公共 API 形状；`Version` 元数据同步到 `v1.1.0`。
+
 ## v0.4.13 - 2026-06-05
 
 ### 治理
