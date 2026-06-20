@@ -2,7 +2,10 @@ module github.com/ZoneCNH/kafkax
 
 go 1.23
 
-require github.com/segmentio/kafka-go v0.4.51
+require (
+	github.com/ZoneCNH/observex v0.3.4
+	github.com/segmentio/kafka-go v0.4.51
+)
 
 require (
 	github.com/klauspost/compress v1.15.9 // indirect
