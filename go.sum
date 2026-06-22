@@ -1,5 +1,5 @@
-github.com/ZoneCNH/observex v0.3.4 h1:hXScowP/qN1SuTMH307T3BofL7I7vkOBGvprvXIdvKg=
-github.com/ZoneCNH/observex v0.3.4/go.mod h1:ZcgTp6Jionnc1CIrghOfWlUHSnKvpc1muhrm4YQFjb4=
+github.com/ZoneCNH/observex v1.0.0 h1:m+1mjimRP+YV+N/pv6MkxG9aQn0QEgKU3iAOUztglfA=
+github.com/ZoneCNH/observex v1.0.0/go.mod h1:ZcgTp6Jionnc1CIrghOfWlUHSnKvpc1muhrm4YQFjb4=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/klauspost/compress v1.15.9 h1:wKRjX6JRtDdrE9qwa4b/Cip7ACOshUI4smpCQanqjSY=

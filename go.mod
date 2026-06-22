@@ -3,7 +3,7 @@ module github.com/ZoneCNH/kafkax
 go 1.23
 
 require (
-	github.com/ZoneCNH/observex v0.3.4
+	github.com/ZoneCNH/observex v1.0.0
 	github.com/segmentio/kafka-go v0.4.51
 )
 
