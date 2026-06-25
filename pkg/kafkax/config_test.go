@@ -54,3 +54,9 @@ func TestConfigValidateRejectsNegativeMaxPollRecords(t *testing.T) {
 		t.Fatalf("expected validation error, got %T %[1]v", err)
 	}
 }
+
+func TestConfigValidateAllowsAllInSyncReplicaAcks(t *testing.T) {
+	if err := (Config{Name: "kafkax", Producer: ProducerConfig{RequiredAcks: -1}}).Validate(); err != nil {
+		t.Fatalf("RequiredAcks=-1 should be valid for all in-sync replicas: %v", err)
+	}
+}

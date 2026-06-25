@@ -1538,7 +1538,7 @@ func TestRunGovernanceCommands(t *testing.T) {
 		}
 		if report.Command != "version" ||
 			report.Status != "passed" ||
-			!slicesContain(report.Details, "kafkax release v1.1.0") ||
+			!slicesContain(report.Details, "kafkax release v1.1.1") ||
 			!slicesContain(report.Details, "goalcli governance runtime v2.9.3") {
 			t.Fatalf("report = %#v; want version gate report", report)
 		}

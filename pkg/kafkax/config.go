@@ -44,8 +44,8 @@ func (c Config) Validate() error {
 		err := errors.New("timeout must not be negative")
 		return validationError("Config.Validate", err.Error(), err)
 	}
-	if c.Producer.RequiredAcks < 0 {
-		err := errors.New("producer required acks must not be negative")
+	if c.Producer.RequiredAcks < -1 {
+		err := errors.New("producer required acks must be -1, 0, or 1")
 		return validationError("Config.Validate", err.Error(), err)
 	}
 	if c.Consumer.SessionTimeout < 0 {
