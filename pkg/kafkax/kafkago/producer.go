@@ -117,10 +117,10 @@ func (p *producer) Close(ctx context.Context) error {
 
 func requiredAcks(value int) kafka.RequiredAcks {
 	switch value {
-	case 0:
-		return kafka.RequireNone
 	case 1:
 		return kafka.RequireOne
+	case -1, 0:
+		return kafka.RequireAll
 	default:
 		return kafka.RequireAll
 	}

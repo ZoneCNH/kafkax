@@ -100,11 +100,11 @@ Producer 通过 `ProducerConfig.RequiredAcks` 控制确认策略：
 
 | RequiredAcks | 语义 | 风险 |
 |---|---|---|
-| 0 | 不等待 broker 确认 | 消息可能丢失，无重试 |
+| 0 (unset) | kafkax 默认等待所有 ISR 确认 | Go 零值按生产安全默认处理 |
 | 1 | 等待 leader 确认 | leader 故障时可能丢失 |
 | -1 (all) | 等待所有 ISR 确认 | 最高持久性保证 |
 
-默认推荐 `RequiredAcks = -1`（all），搭配 topic 侧 `TopicSpec.MinInSyncReplicas >= 2` 使用。
+默认推荐保持零值或显式设置 `RequiredAcks = -1`（all），搭配 topic 侧 `TopicSpec.MinInSyncReplicas >= 2` 使用。kafkax 不把零值映射为 no-ack，因为生产适配器必须默认保留持久化确认。
 
 ### 投递保证
 
@@ -149,10 +149,10 @@ type RetryConfig struct {
 
 kafkax 本身不内置 retry topic 或 dead letter topic（DLT）机制。这些是消费端的业务策略，由调用方在 handler 中实现：
 
-- **retry topic**：handler 捕获 `Retryable` 错误后，将消息重新投递到 delay queue topic
-- **DLT**：handler 重试耗尽后，将消息写入 dead letter topic 并 commit offset，避免卡住分区消费
+- **retry topic**：handler 捕获 `Retryable` 错误后，将消息重新投递到 delay queue topic，例如 `<topic>.retry.<attempt>`，并保留原始 topic、partition、offset、attempt、next-at 等 headers
+- **DLT**：handler 重试耗尽后，将消息写入 dead letter topic，例如 `<topic>.dlt`，记录最终错误和原始 offset，然后 commit offset，避免卡住分区消费
 
-kafkax 在公开 API 中保留 headers 和 `Retryable` 错误标记，为上层实现 retry/DLT 策略提供基础。
+生产调用方应把 retry/DLT topic 作为显式 topic 资源纳入 `AdminClient.EnsureTopic`/IaC 管理，并让业务 handler 负责幂等去重。kafkax 在公开 API 中保留 headers 和 `Retryable` 错误标记，为上层实现 retry/DLT 策略提供基础。
 
 ## Driver-Neutral 设计
 
@@ -214,7 +214,7 @@ type SecurityConfig struct {
 }
 
 type ProducerConfig struct {
-    RequiredAcks int  // 0 / 1 / -1
+    RequiredAcks int  // 0(unset => all) / 1 / -1(all)
     Idempotent   bool
     BatchBytes   int
 }
