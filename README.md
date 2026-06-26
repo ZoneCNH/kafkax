@@ -154,6 +154,15 @@ kafkax 本身不内置 retry topic 或 dead letter topic（DLT）机制。这些
 
 kafkax 在公开 API 中保留 headers 和 `Retryable` 错误标记，为上层实现 retry/DLT 策略提供基础。
 
+Plan008 documented pattern 固定如下，调用方文档和运行时配置必须保持一致：
+
+- 基础重试 topic：`{topic}.retry`
+- 延迟重试 topic：`{topic}.retry.{delay}`
+- Dead Letter Topic：`{topic}.dlt`
+- 必带 headers：`x-original-topic`、`x-retry-count`、`x-max-retries`
+- 最大重试配置字段：`max_retries`
+- handler 必须使用 `idempotency key` 去重，避免 at-least-once 与重试投递造成重复副作用
+
 ## Driver-Neutral 设计
 
 kafkax 公开 API 不暴露任何第三方 Kafka client 具体类型。生产驱动 `kafkago.Driver`（`pkg/kafkax/kafkago/driver.go`）基于 `segmentio/kafka-go` 实现 `kafkax.Producer`、`kafkax.ConsumerFactory` 和 `kafkax.Admin`，通过 `ClientOptions()` 返回 `kafkax.Option` 注入到 `kafkax.Client`：
