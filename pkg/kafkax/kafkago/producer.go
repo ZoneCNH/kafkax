@@ -18,16 +18,22 @@ type producer struct {
 
 func newProducer(d *Driver) *producer {
 	p := &producer{d: d}
+	requiredAcksValue := d.cfg.Producer.RequiredAcks
+	if d.cfg.Producer.Idempotent && requiredAcksValue >= 0 && requiredAcksValue <= 1 {
+		requiredAcksValue = -1
+	}
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(d.cfg.Brokers...),
 		Transport:    d.transport,
-		RequiredAcks: requiredAcks(d.cfg.Producer.RequiredAcks),
+		RequiredAcks: requiredAcks(requiredAcksValue),
 		BatchBytes:   int64(d.cfg.Producer.BatchBytes),
 		MaxAttempts:  maxAttempts(d.cfg.Retry.MaxAttempts),
 		WriteTimeout: d.cfg.Timeout,
 		ReadTimeout:  d.cfg.Timeout,
 		Completion: func(messages []kafka.Message, err error) {
+			p.mu.Lock()
 			p.last = append(p.last[:0], messages...)
+			p.mu.Unlock()
 		},
 	}
 	if writer.BatchBytes <= 0 {
@@ -65,7 +71,9 @@ func (p *producer) SendBatch(ctx context.Context, messages []kafkax.Message, opt
 	start := time.Now()
 	p.mu.Lock()
 	p.last = p.last[:0]
+	p.mu.Unlock()
 	err := p.writer.WriteMessages(ctx, kafkaMessages...)
+	p.mu.Lock()
 	completed := append([]kafka.Message(nil), p.last...)
 	p.mu.Unlock()
 	if err != nil {

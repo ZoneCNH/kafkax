@@ -180,10 +180,21 @@ func (d *Driver) Close(ctx context.Context) error {
 }
 
 func saslMechanism(sec kafkax.SecurityConfig) (sasl.Mechanism, error) {
+	const op = "kafkago.saslMechanism"
 	if sec.Username == "" || sec.Password == "" {
-		return nil, kafkax.NewError(kafkax.ErrorKindConfig, "kafkago.saslMechanism", "SASL username and password are required", false)
+		return nil, kafkax.NewError(kafkax.ErrorKindConfig, op, "SASL username and password are required", false)
 	}
-	return plain.Mechanism{Username: sec.Username, Password: sec.Password}, nil
+	mechanism := strings.TrimSpace(sec.Mechanism)
+	if mechanism == "" {
+		mechanism = "PLAIN"
+	}
+	upper := strings.ToUpper(mechanism)
+	switch upper {
+	case "PLAIN":
+		return plain.Mechanism{Username: sec.Username, Password: sec.Password}, nil
+	default:
+		return nil, kafkax.NewError(kafkax.ErrorKindConfig, op, "unsupported SASL mechanism: "+mechanism+" (only PLAIN is supported)", false)
+	}
 }
 
 func tlsConfigFor(sec kafkax.SecurityConfig, settings options) *tls.Config {

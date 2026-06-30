@@ -195,7 +195,7 @@ func TestConfigValidateRejectsNegativeKafkaDurations(t *testing.T) {
 		"admin timeout":            {Name: "kafkax", Admin: AdminConfig{Timeout: -1}},
 		"retry backoff":            {Name: "kafkax", Retry: RetryConfig{Backoff: -1}},
 		"retry attempts":           {Name: "kafkax", Retry: RetryConfig{MaxAttempts: -1}},
-		"producer required acks":   {Name: "kafkax", Producer: ProducerConfig{RequiredAcks: -1}},
+		"producer required acks":   {Name: "kafkax", Producer: ProducerConfig{RequiredAcks: -2}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := config.Validate(); !IsKind(err, ErrorKindValidation) {

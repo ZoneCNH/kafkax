@@ -2,6 +2,9 @@ package kafkax
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"strings"
 	"time"
 )
 
@@ -29,6 +32,7 @@ func (c *Client) HealthCheck(ctx context.Context) HealthStatus {
 	initialized := false
 	closed := true
 	var timeout time.Duration
+	var brokers []string
 
 	if c != nil {
 		c.mu.Lock()
@@ -37,6 +41,7 @@ func (c *Client) HealthCheck(ctx context.Context) HealthStatus {
 		initialized = c.initialized
 		closed = c.closed
 		timeout = c.cfg.Timeout
+		brokers = c.cfg.Brokers
 		c.mu.Unlock()
 		if name == "" {
 			name = "kafkax"
@@ -125,6 +130,35 @@ func (c *Client) HealthCheck(ctx context.Context) HealthStatus {
 				return status
 			}
 		}
+	}
+
+	dialTimeout := 3 * time.Second
+	if timeout > 0 && timeout < dialTimeout {
+		dialTimeout = timeout
+	}
+	brokerReachable := false
+	var lastDialErr string
+	for _, broker := range brokers {
+		conn, err := net.DialTimeout("tcp", broker, dialTimeout)
+		if err == nil {
+			_ = conn.Close()
+			brokerReachable = true
+			break
+		}
+		lastDialErr = err.Error()
+	}
+
+	if len(brokers) > 0 && !brokerReachable {
+		status := HealthStatus{
+			Name:      name,
+			Status:    HealthUnhealthy,
+			Message:   fmt.Sprintf("no broker reachable (checked %d brokers): %s", len(brokers), lastDialErr),
+			CheckedAt: time.Now(),
+			LatencyMs: time.Since(start).Milliseconds(),
+			Metadata:  map[string]string{"brokers": strings.Join(brokers, ",")},
+		}
+		recordHealthMetric(metrics, status)
+		return status
 	}
 
 	status := HealthStatus{

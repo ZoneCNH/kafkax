@@ -3,6 +3,7 @@ package kafkax
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -279,6 +280,55 @@ func TestHealthStatusJSONContract(t *testing.T) {
 	}
 	if strings.Contains(encoded, "CheckedAt") || strings.Contains(encoded, "LatencyMs") {
 		t.Fatalf("expected snake_case JSON fields, got %s", encoded)
+	}
+}
+
+func TestHealthCheckBrokerReachableHealthy(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() { conn, _ := ln.Accept(); if conn != nil { _ = conn.Close() } }()
+
+	client, err := New(context.Background(), Config{
+		Name:    "kafkax",
+		Brokers: []string{ln.Addr().String()},
+		Timeout: 2 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	status := client.HealthCheck(context.Background())
+	if status.Status != HealthHealthy {
+		t.Fatalf("expected healthy with reachable broker, got %q: %s", status.Status, status.Message)
+	}
+}
+
+func TestHealthCheckBrokerUnreachableUnhealthy(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	client, err := New(context.Background(), Config{
+		Name:    "kafkax",
+		Brokers: []string{addr},
+		Timeout: 500 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	status := client.HealthCheck(context.Background())
+	if status.Status != HealthUnhealthy {
+		t.Fatalf("expected unhealthy with unreachable broker, got %q", status.Status)
+	}
+	if !strings.Contains(status.Message, "no broker reachable") {
+		t.Fatalf("expected broker unreachable message, got %q", status.Message)
 	}
 }
 
