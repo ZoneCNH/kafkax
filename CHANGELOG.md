@@ -2,6 +2,17 @@
 
 ## 未发布
 
+## v1.1.1 - 2026-06-21
+
+### 治理
+
+- 将 `pkg/kafkax.Version`、`goalcli` 治理版本、`releasemanifest` 默认值、release manifest、harness 和 release 文档同步到 `v1.1.1`。
+- 本次仅同步发布元数据与文档投影，不改变运行时行为或模块登记。
+
+### 兼容性
+
+- 本次仅推进发布元数据与文档投影，不改变 `pkg/kafkax` 公共 API 形状。
+
 ## v1.1.0 - 2026-06-19
 
 ### 新增

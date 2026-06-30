@@ -1,6 +1,6 @@
 # kafkax
 
-Release version: v1.1.0
+Release version: v1.1.1
 
 `kafkax` 是 FoundationX 的 **L2 Kafka adapter 基础库**，为 FoundationX 量化交易系统提供 driver-neutral 的 Kafka 生产、消费和集群管理能力。
 
